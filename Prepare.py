@@ -109,9 +109,10 @@ class Problem:
         self.moving_success = [True, True, True, True, True, True, True, True]
         self.instruction = [True, True, True, True, True, True, True, True]  # 用于储存控制策略函数的返回值
         self.online_task_arrival_352, self.online_task_arrival_356 = \
-            scheduling(scheduling_property, cycle_time, size)  # todo 在线任务的到达序列，可以不放在initialize.py
+            scheduling(scheduling_property, cycle_time, size)
         self.time = 0  # 系统全局时间步
         self.is_finished = False  # 判定仿真过程是否完成
+        self.online_task_arrival = False  # 判断是否有任务到达
         self.tmp = []  # 用于暂存车辆下一步的位置
 
         # route_controller
@@ -120,14 +121,20 @@ class Problem:
     # 更新任务字典，加入在线任务
     def renew_task_online(self, dict_task_simultanious):
         num = len(dict_task_simultanious)
+        p = num
         while self.time >= self.online_task_arrival_352[0]:
             num += 1
             dict_task_simultanious[num] = Task(num, self.online_task_arrival_352[0], 1, 352, -1, 0, -1)
             self.online_task_arrival_352.pop(0)
+
         while self.time >= self.online_task_arrival_356[0]:
             num += 1
             dict_task_simultanious[num] = Task(num, self.online_task_arrival_356[0], 1, 356, -1, 0, -1)
             self.online_task_arrival_356.pop(0)
+        if p == num:
+            self.online_task_arrival = False
+        else:
+            self.online_task_arrival = True
 
     # 碰撞判断
     def collision_check(self):
@@ -219,9 +226,8 @@ class Problem:
                 self.AGV[i+1].route.pop(0)
                 if len(self.AGV[i+1].route) >= 3:
                     self.AGV[i+1].next_loc = self.AGV[i+1].route[2]
-                # else:  # todo 可能进不了这个判断
-                    # assert len(self.AGV[i+1]) < 3
-                    # self.AGV[i+1].next_loc = -1
+                else:
+                    self.AGV[i+1].next_loc = self.AGV[i+1].location
             elif instruction[i] is False and self.move_status == 0:  # instruction[i] and self.move_status != 0:
                 self.AGV[i+1].status = 'waiting'  # 该前进但需要等待
                 self.moving_success[i] = False
@@ -234,7 +240,7 @@ class Problem:
         """控制车辆状态变更（走，停，转弯，...）"""
         for i in range(len(self.AGV)):
             if self.move_status[i] == 0 and (self.AGV[i+1].status != 'busy' or 'idle' or 'put_arriving'):
-                if self.AGV[i+1].next_loc != -1:
+                if self.AGV[i+1].next_loc != self.AGV[i+1].location:
                     self.AGV[i+1].status = 'busy'
                 else:
                     self.AGV[i+1].status = 'idle'
@@ -297,14 +303,19 @@ class Problem:
                 self.AGV[i].task = self.AGV[i].tasklist[0]
             else:
                 self.AGV[i].task = -1
-            self.AGV[i].route = list(route_seq[i])
-            if self.AGV[i].route[0] == self.AGV[i].location and self.AGV[i].last_loc == -1:  # todo 新路径到达时可能会有问题
-                self.AGV[i].route.insert(0, self.AGV[i].location)
-                self.AGV[i].last_loc = self.AGV[i].route[0]
-                if self.AGV[i].route[2]:
+            self.AGV[i].route = list(route_seq[i])  # todo 待测试
+            if self.AGV[i].route[0] == self.AGV[i].location:
+                if self.AGV[i].last_loc == -1:  # 只在初始化时last_loc为-1
+                    self.AGV[i].route.insert(0, self.AGV[i].location)
+                    self.AGV[i].last_loc = self.AGV[i].route[0]
+                else:
+                    self.AGV[i].route.insert(0, self.AGV[i].last_loc)
+                if len(self.AGV[i].route) >= 3:
                     self.AGV[i].next_loc = self.AGV[i].route[2]
                 else:
-                    self.AGV[i].next_loc = -1
+                    self.AGV[i].next_loc = self.AGV[i].location
+            else:
+                print('路径格式错误')
 
     # 将路径赋予对应任务时，更新任务的路径序列：
     def update_task(self):
@@ -332,14 +343,8 @@ class Problem:
     def run_step(self):
         """
         主流程函数
-
-        :return:
         """
         # 根据任务到达情况更新task列表
-        """
-        if self.t >= next_online_task:
-            self.renew_task_online()
-        """
         self.deadlock_check()
         self.turning_identify()
         self.arriving_identify()
@@ -355,9 +360,9 @@ class Problem:
                 loc_list=[self.AGV[i].location for i in range(1, 9)],
                 step_list=self.moving_success
             )
-        # todo 下发控制路径 step_list 上一步到底有没有走成功，转弯不算走，移动
+        # 下发控制路径 step_list 上一步到底有没有走成功，转弯不算走，移动
 
-        self.error_generating()  # 误差生成+修改AGV状态
+        self.error_generating()  # 误差生成
 
         # 冲突检测+策略修正
         self.fix_instruction()
