@@ -11,10 +11,16 @@ class Grid:
         self.id = grid_id  # 地图节点的编号
         self.x = x  # 节点横坐标
         self.y = y  # 节点纵坐标
-        self.type = grid_type  # 节点的类型 道路/停靠点/货位
+        self.type = grid_type  # 节点的类型 道路/停靠点为1，货位为2
         self.neighbor = neighbor
-        self.state = state  # 节点的库存配置状态，-1代表道路节点，0 代表无货，1 代表有货
-        self.conflict = conflict_list  # 每个节点的冲突节点列表，-1为路径节点，列表为库位节点
+        if state == -1:
+            self.state = None
+        else:
+            self.state = state  # 节点的库存配置状态，None代表道路节点，0 代表无货，1 代表有货
+        if conflict_list == [-1]:
+            self.conflict = None
+        else:
+            self.conflict = conflict_list  # 每个节点的冲突节点列表，None为路径节点，列表为库位节点
 
 
 # 初始化函数读入配置文件
@@ -32,3 +38,6 @@ def create_map(df_grid, df_inventory):
 
 
 dictionary_map = create_map(df_Grid, df_Inventory)
+
+print(dictionary_map[1].conflict)
+print(dictionary_map[1].state)

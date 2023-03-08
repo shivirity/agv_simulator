@@ -18,9 +18,6 @@ def sp_exponential(t, size):
     r = random.exponential(t, size)
     return np.cumsum(r)
 
-
-
-
 # print(scheduling('exponential', 216, 10))
 
 
@@ -31,7 +28,10 @@ def create_task_offline(df_task_off):
     for i in range(df_task_off.shape[0]):
         task_tmp = Task(df_task_off.iloc[i, 0], 0, 0, df_task_off.iloc[i, 1],
                         df_task_off.iloc[i, 2], 1, df_task_off.iloc[i, 3])
+        # todo 如果离线任务需要修改指派，此处的任务状态需要修改
         dict_task[i+1] = task_tmp
+    for i in range(1, 9):  # 此处没有用叉车的数量，直接用了8
+        dict_task[-i] = Task(-i, None, None, None, init_loc[i-1], None, i-1)  # 更新每辆车的return任务
     return dict_task
 
 

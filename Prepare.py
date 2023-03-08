@@ -5,6 +5,8 @@ import pandas as pd
 import logging
 random.seed(42)
 logging.basicConfig(level=logging.INFO)
+# todo task不存在时不再记为-1 记为None
+
 
 def sp_uniform(t, size):
     """生成在线任务到达时间，从0开始"""
@@ -63,13 +65,15 @@ class AGV:
     def __init__(self, num, simul_loc, park_grid, task_list):
         self.ID = num
         self.status = 'idle'  # idle, busy, down, block具体状态代表的含义还需要统一
-        self.task = -1  # 实时任务编号task_list[0]
+        self.task = None  # 实时任务编号task_list[0]
         self.tasklist = task_list  # 已规划任务清单
         self.route = []  # 从 任务库 中导出对应任务编号的任务路径序列，并将其赋予叉车route_list[self.task]
         self.location = simul_loc  # 位置节点编号self.route[2]
-        self.last_loc = -1  # 序列中上一目标位置编号self.route[0]
-        self.next_loc = -1  # 序列中下一目标位置编号self.route[2]
+        self.last_loc = None  # 序列中上一目标位置编号self.route[0]
+        self.next_loc = None  # 序列中下一目标位置编号self.route[2]
         self.park_loc = park_grid
+        self.task_status = None  # 'get', 'put', 'return', None
+        self.is_load = 0  # 0表示车上空载，1表示车上有货
 
     def get_location(self):  # 考虑可以放在Problem类，依据AGV编号来获取实时位置
         return self.location
@@ -84,9 +88,10 @@ class Task:
         self.arrival = arrival  # 任务到达时间
         self.type = task_type  # streamline(online)记为 1 & warehouse(offline)记为 0
         self.start = start  # 任务取货位置
-        self.end = end  # 任务卸货位置，-1表示未分配库位
-        self.state = state  # 任务状态，0表示未分配，1表示被分配但未执行，2表示正在执行
-        self.car = car  # 表示分配的叉车序号，-1表示未被分配
+        self.end = end  # 任务卸货位置，None表示未分配库位
+        self.state = state  # 任务状态，0表示未分配，1表示被分配但未执行，2表示正在执行，3表示已完成
+        self.car = car  # 表示分配的叉车序号，None表示未被分配
+        self.route_seq = None  # 储存任务对应的路径序列，从起点到取货点到卸货点为完整序列
 
 
 class Problem:
@@ -114,22 +119,24 @@ class Problem:
         self.is_finished = False  # 判定仿真过程是否完成
         self.online_task_arrival = False  # 判断是否有任务到达
         self.tmp = []  # 用于暂存车辆下一步的位置
+        self.online_task_buffer = []  # 用于储存待分配的在线任务编号
+        self.offline_task_buffer = []  # 用于储存待分配的离线任务编号
 
         # route_controller
         self.controller = None
 
     # 更新任务字典，加入在线任务
-    def renew_task_online(self, dict_task_simultanious):
-        num = len(dict_task_simultanious)
+    def renew_task_online(self, dict_task_simultaneous):
+        num = len(dict_task_simultaneous) - 8
         p = num
         while self.time >= self.online_task_arrival_352[0]:
             num += 1
-            dict_task_simultanious[num] = Task(num, self.online_task_arrival_352[0], 1, 352, -1, 0, -1)
+            dict_task_simultaneous[num] = Task(num, self.online_task_arrival_352[0], 1, 352, None, 0, None)
             self.online_task_arrival_352.pop(0)
 
         while self.time >= self.online_task_arrival_356[0]:
             num += 1
-            dict_task_simultanious[num] = Task(num, self.online_task_arrival_356[0], 1, 356, -1, 0, -1)
+            dict_task_simultaneous[num] = Task(num, self.online_task_arrival_356[0], 1, 356, None, 0, None)
             self.online_task_arrival_356.pop(0)
         if p == num:
             self.online_task_arrival = False
@@ -226,7 +233,7 @@ class Problem:
                 self.AGV[i+1].route.pop(0)
                 if len(self.AGV[i+1].route) >= 3:
                     self.AGV[i+1].next_loc = self.AGV[i+1].route[2]
-                else:
+                else:  # 应该进不了这个判断
                     self.AGV[i+1].next_loc = self.AGV[i+1].location
             elif instruction[i] is False and self.move_status == 0:  # instruction[i] and self.move_status != 0:
                 self.AGV[i+1].status = 'waiting'  # 该前进但需要等待
@@ -239,23 +246,57 @@ class Problem:
     def agvs_status_change(self):
         """控制车辆状态变更（走，停，转弯，...）"""
         for i in range(len(self.AGV)):
+            if self.AGV[i+1].status == 'get_arriving' and self.move_status[i] == 0:
+                self.AGV[i+1].task_status = 'put'
+                self.AGV[i+1].is_load = 1
             if self.move_status[i] == 0 and (self.AGV[i+1].status != 'busy' or 'idle' or 'put_arriving'):
                 if self.AGV[i+1].next_loc != self.AGV[i+1].location:
                     self.AGV[i+1].status = 'busy'
                 else:
                     self.AGV[i+1].status = 'idle'
             if self.AGV[i+1].status == 'put_arriving' and self.move_status[i] == 0:
-                if self.AGV[i+1].task == -1:
+                self.AGV[i+1].is_load = 0
+                self.Task[self.AGV[i+1].task].state = 3  # 代表当前任务完成
+                self.AGV[i+1].tasklist.pop(0)
+                self.AGV[i+1].task = self.AGV[i + 1].tasklist[0]
+                if len(self.AGV[i+1].tasklist) == 1:
                     self.AGV[i+1].status = 'idle'
+                    self.AGV[i+1].task_status = 'return'
                 else:
+                    self.Task[self.AGV[i].task].state = 1
+                    self.AGV[i+1].task_status = 'get'
                     self.AGV[i+1].status = 'busy'
 
-    # 返回所有AGV的实时位置及状态
-    def get_agv_state(self):
-        status_list = []
+                # todo 根据读入的route格式，此处应更新下一任务的路径
+
+    # 返回所有AGV的实时任务执行状态
+    def get_agv_task_status(self):
+        task_status_list = []
         for i in range(len(self.AGV)):
-            status_list.append(self.AGV[i+1].status)
-        return status_list
+            task_status_list.append(self.AGV[i+1].task_status)
+        return task_status_list
+
+    # 返回所有AGV的实时位置
+    def get_agv_location(self):
+        location_list = []
+        for i in range(len(self.AGV)):
+            location_list.append(self.AGV[i + 1].location)
+        return location_list
+
+    # 返回所有AGV的实时任务编号
+    def get_agv_task(self):
+        simultaneous_task_list = []
+        for i in range(len(self.AGV)):
+            simultaneous_task_list.append(self.AGV[i + 1].task)
+        return simultaneous_task_list
+
+    # 返回带规划的任务编号
+    def get_task_not_assigned(self):
+        not_assign_list = []
+        for i in range(1, len(self.Task) - 7):
+            if self.Task[i].state == 0 or 1:
+                not_assign_list.append(i)
+        return not_assign_list
 
     # 返回货位情况
     def get_cargo_state(self):
@@ -265,22 +306,33 @@ class Problem:
     # 车辆到达并取卸货的判断
     def arriving_identify(self):
         for i in range(len(self.AGV)):
-            task_now = self.Task[self.AGV[i+1].task]
-            if self.AGV[i+1].location == task_now.start:
-                self.AGV[i+1].status = 'get_arriving'
-                self.move_status[i] += self.cargo_time  # 等待时间加上一个取、卸货的时间
-            if self.AGV[i+1].location == task_now.end:
-                self.AGV[i+1].status = 'put_arriving'
-                self.AGV[i+1].tasklist.pop(0)  # 完成当前任务
-                self.move_status[i] += self.cargo_time  # 等待时间加上一个取、卸货的时间
-            if self.AGV[i+1].location == self.AGV[i+1].park_loc and self.AGV[i+1].status != 'idle':
-                self.AGV[i+1].status = 'idle'
-            elif self.AGV[i+1].location == self.AGV[i+1].park_loc and self.AGV[i+1].status == 'idle':
-                if self.AGV[i+1].task == -1:
-                    self.move_status[i] += 1
-                    # todo 此处无法计算叉车在停靠点等待多久
-                else:
-                    self.AGV[i+1].status = 'busy'
+            if self.AGV[i+1].task:
+                task_now = self.Task[self.AGV[i+1].task]
+                if self.AGV[i+1].location == task_now.start:
+                    self.AGV[i+1].status = 'get_arriving'
+                    self.move_status[i] += self.cargo_time  # 等待时间加上一个取、卸货的时间
+                if self.AGV[i+1].location == task_now.end:
+                    self.AGV[i+1].status = 'put_arriving'
+                    # 完成当前任务, 将当前任务从列表中pop出，但task属性还是需要判断是否在执行return任务
+                    # self.AGV[i+1].tasklist.pop(0)
+                    self.move_status[i] += self.cargo_time  # 等待时间加上一个取、卸货的时间
+            # if self.AGV[i+1].location == self.AGV[i+1].park_loc and self.AGV[i+1].status != 'idle':
+                # self.AGV[i+1].status = 'idle'
+            if self.AGV[i+1].next_loc == self.AGV[i+1].park_loc and len(self.AGV[i+1].tasklist) == 1:
+                if len(self.AGV[i+1].tasklist) == 1:
+                    self.AGV[i+1].tasklist = None
+                    self.AGV[i+1].task = None
+                    self.AGV[i+1].task_status = None
+            if self.AGV[i+1].location == self.AGV[i+1].park_loc and self.AGV[i+1].tasklist is None:
+                self.move_status[i] += 1
+                # todo 此处无法计算叉车在停靠点等待多久
+            elif self.AGV[i+1].location == self.AGV[i+1].park_loc and len(self.AGV[i+1].tasklist) > 1:
+                if self.AGV[i+1].task < 0:
+                    self.AGV[i+1].tasklist.pop(0)
+                    self.AGV[i+1].task = self.AGV[i+1].tasklist[0]
+                    self.Task[self.AGV[i].task].state = 2
+                self.AGV[i+1].status = 'busy'
+                self.AGV[i+1].task_status = 'get'
 
     # 车辆转弯的判断
     def turning_identify(self):
@@ -296,16 +348,43 @@ class Problem:
                 self.AGV[i+1].status = 'busy'
 
     # 将任务及路径分配给叉车时，更新叉车属性：
-    def update_car(self, task_dict, route_seq):
+    def update_car(self, task_dict):
         for i in range(1, len(self.AGV)+1):
+            # 判断此时是否在执行返回任务，若否，task和tasklist都空或都有
+            # if len(self.AGV[i].tasklist) == 1:  # 或self.AGV[i].task_status == ’return‘
+                # self.AGV[i].task_status = 'get'
+                # self.AGV[i].task = None
             self.AGV[i].tasklist = list(task_dict[i])
-            if self.AGV[i].tasklist:
-                self.AGV[i].task = self.AGV[i].tasklist[0]
-            else:
-                self.AGV[i].task = -1
-            self.AGV[i].route = list(route_seq[i])  # todo 待测试
+            if self.AGV[i].tasklist:  # 判断列表不为空
+                if self.AGV[i].task is None:  # 包括初始化  # 或self.AGV[i].task_status == None
+                    self.AGV[i].task = self.AGV[i].tasklist[0]
+                    self.AGV[i].task_status = 'get'
+                    for j in self.AGV[i].tasklist:
+                        if j == self.AGV[i].task:
+                            self.AGV[i].route += self.Task[j].route_seq
+                        else:
+                            tmp = self.Task[j].route_seq
+                            tmp.pop(0)
+                            self.AGV[i].route += tmp
+                else:
+                    temp = self.AGV[i].tasklist
+                    temp.pop(0)
+                    for j in temp:
+                        tmp = self.Task[j].route_seq
+                        tmp.pop(0)
+                        self.AGV[i].route += tmp
+                if self.AGV[i].task > 0:
+                    self.Task[self.AGV[i].task].state = 2
+                    self.Task[self.AGV[i].task].car = i
+                    for j in range(1, len(self.AGV[i].tasklist)):
+                        if self.AGV[i].tasklist[j] > 0:
+                            self.Task[self.AGV[i].tasklist[j]].state = 1
+                            self.Task[self.AGV[i].tasklist[j]].car = i
+            else:  # 进这个循环大概就结束了吧
+                pass  # self.AGV[i].task = None  # 注意task属性为-1时不可以用作Task索引的key值
+            # todo 待修改及测试  # 下面这段可以放到 if self.AGV[i].task is None条件下
             if self.AGV[i].route[0] == self.AGV[i].location:
-                if self.AGV[i].last_loc == -1:  # 只在初始化时last_loc为-1
+                if self.AGV[i].last_loc is None:  # 只在初始化时last_loc为-1
                     self.AGV[i].route.insert(0, self.AGV[i].location)
                     self.AGV[i].last_loc = self.AGV[i].route[0]
                 else:
@@ -314,8 +393,6 @@ class Problem:
                     self.AGV[i].next_loc = self.AGV[i].route[2]
                 else:
                     self.AGV[i].next_loc = self.AGV[i].location
-            else:
-                print('路径格式错误')
 
     # 将路径赋予对应任务时，更新任务的路径序列：
     def update_task(self):
