@@ -41,5 +41,5 @@ def create_map(df_grid, df_inventory):
 
 dictionary_map = create_map(df_Grid, df_Inventory)
 
-print(dictionary_map[1].conflict)
-print(dictionary_map[1].state)
+# print(dictionary_map[1].conflict)
+# print(dictionary_map[1].state)

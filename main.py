@@ -8,7 +8,8 @@ if __name__ == '__main__':
 
     # 数据读入
 
-    problem = Problem(dictionary_map, dictionary_task, dictionary_car, 'uniform', 216, 50)
+    problem = Problem(dictionary_map, dictionary_task, dictionary_car,
+                      dictionary_task_online_ending_order, 'uniform', 216, 50)
 
     first_in = True
 
@@ -18,7 +19,7 @@ if __name__ == '__main__':
         problem.renew_task_online(problem.Task)  # 更新在线任务的到达
         # 系统静态更新
         if problem.time % 216 == 0 or problem.online_task_arrival:  # 路径规划的更新节点判断条件
-            task_dict, route_seq = problem.route_scheduling()
+            task_dict = problem.route_scheduling()
 
             problem.update_car(task_dict=task_dict)
 

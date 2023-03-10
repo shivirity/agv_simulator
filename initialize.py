@@ -38,6 +38,7 @@ def create_task_offline(df_task_off):
 def create_task_online_order(df_task_on_order, df_car):
     dict_end_online = {}
     for i in range(df_task_on_order.shape[1] - 1):
+        # 输出车辆编号对应的区域的终点选择优先级序列
         dict_end_online[i+1] = df_task_on_order[df_car[df_car['id'] == i+1].iloc[0, 2]].tolist()
     return dict_end_online
 

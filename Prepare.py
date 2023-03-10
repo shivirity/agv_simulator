@@ -101,10 +101,11 @@ class Problem:
     beta = 0.001  # 二类误差产生的概率
     cargo_time = 5  # 取、卸货的时间步长
 
-    def __init__(self, dict_map, dict_task, dict_agv, scheduling_property, cycle_time, size):
+    def __init__(self, dict_map, dict_task, dict_agv, dict_task_order, scheduling_property, cycle_time, size):
         self.Map = dict_map
         self.Task = dict_task  # 储存任务信息，包括任务状态
         self.AGV = dict_agv  # 储存各AGV的实时位置信息
+        self.Task_order = dict_task_order  # 储存车辆在线任务终点的候选节点列表
         # self.Route = []  # 储存正在执行的任务路径 似乎不太需要
         self.error = 0  # 错误代码，表示系统出现碰撞的次数
         self.deadlock = {}  # 储存发生死锁的车辆闭环
@@ -118,11 +119,12 @@ class Problem:
         self.is_finished = False  # 判定仿真过程是否完成
         self.online_task_arrival = False  # 判断是否有任务到达
         self.tmp = []  # 用于暂存车辆下一步的位置
-        self.not_assigned_task_buffer = []  # 用于储存待规划的任务编号，调用函数才会更新
-        self.not_performed_task_buffer = []  # 用于储存待执行的离线任务编号，调用函数才会更新
+        # self.not_assigned_task_buffer = []  # 用于储存待规划的任务编号，调用函数才会更新
+        # self.not_performed_task_buffer = []  # 用于储存待执行的离线任务编号，调用函数才会更新
 
         # route_controller
         self.controller = None
+        self.route_scheduling = None
 
     # 更新任务字典，加入在线任务
     def renew_task_online(self, dict_task_simultaneous):
@@ -268,7 +270,10 @@ class Problem:
                     # 叉车从上一个任务的卸货点出发执行任务
                     self.Map[self.Task[self.AGV[i+1].task].start].reservation = True
                     self.Map[self.Task[self.AGV[i+1].task].end].reservation = True
-                    self.Task[self.AGV[i + 1].task].state = 2
+                    self.Task[self.AGV[i+1].task].state = 2
+                    # 在线任务开始执行后将终点序列更新  # todo 待测试
+                    if i <= 3 and self.Task[self.AGV[i+1].task].end == self.Task_order[i+1][0]:
+                        self.Task_order[i+1].pop(0)
                     self.AGV[i+1].task_status = 'get'
                     self.AGV[i+1].status = 'busy'
 
@@ -299,7 +304,7 @@ class Problem:
         for i in range(1, len(self.Task) - 7):
             if self.Task[i].state == 0:
                 not_assign_list.append(i)
-        self.not_assigned_task_buffer = not_assign_list
+        return not_assign_list
 
     # 返回待执行的任务编号
     def get_task_not_perform(self):
@@ -307,7 +312,7 @@ class Problem:
         for i in range(1, len(self.Task) - 7):
             if self.Task[i].state == 0 or 1:
                 not_perform_list.append(i)
-        self.not_performed_task_buffer = not_perform_list
+        return not_perform_list
 
     # 返回货位情况
     def get_cargo_state(self):
@@ -354,9 +359,12 @@ class Problem:
                 if self.AGV[i+1].task < 0:
                     self.AGV[i+1].tasklist.pop(0)
                     self.AGV[i+1].task = self.AGV[i+1].tasklist[0]
-                    self.Task[self.AGV[i+1].task].state = 2
-                    self.Map[self.Task[self.AGV[i+1].task].start].reservation = True
-                    self.Map[self.Task[self.AGV[i+1].task].end].reservation = True
+                self.Task[self.AGV[i+1].task].state = 2
+                self.Map[self.Task[self.AGV[i+1].task].start].reservation = True
+                self.Map[self.Task[self.AGV[i+1].task].end].reservation = True
+                # 在线任务开始执行后将终点序列更新  # todo 待测试
+                if i <= 3 and self.Task[self.AGV[i+1].task].end == self.Task_order[i+1][0]:
+                    self.Task_order[i+1].pop(0)
                 self.AGV[i+1].status = 'busy'
                 self.AGV[i+1].task_status = 'get'
 
