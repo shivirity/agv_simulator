@@ -20,7 +20,7 @@ if __name__ == '__main__':
         if problem.time % 216 == 0 or problem.online_task_arrival:  # 路径规划的更新节点判断条件
             task_dict, route_seq = problem.route_scheduling()
 
-            problem.update_car(task_dict=task_dict, route_seq=route_seq)
+            problem.update_car(task_dict=task_dict)
 
             # 初始化controller
             if first_in:
