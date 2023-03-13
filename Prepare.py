@@ -298,6 +298,13 @@ class Problem:
             simultaneous_task_list.append(self.AGV[i+1].task)
         return simultaneous_task_list
 
+    # 返回所有AGV的实时任务列表
+    def get_agv_tasklist(self):
+        simultaneous_tasklist_list = []
+        for i in range(len(self.AGV)):
+            simultaneous_tasklist_list.append(self.AGV[i + 1].tasklist)
+        return simultaneous_tasklist_list
+
     # 返回待规划的任务编号
     def get_task_not_assigned(self):
         not_assign_list = []
@@ -508,4 +515,4 @@ class Problem:
             7: [135, 134, 133, 132, 136, 137, 141, 142],
             8: [140, 139, 138, 137, 141, 142, 143, 144],
         }
-        return task_dict, route_seq
+        return task_dict
