@@ -431,16 +431,17 @@ class Problem:
             else:  # 进这个循环大概就结束了吧
                 pass  # self.AGV[i].task = None  # 注意task属性为-1时不可以用作Task索引的key值
             # todo 待修改及测试  # 下面这段可以放到 if self.AGV[i].task is None条件下
-            if self.AGV[i].route[0] == self.AGV[i].location:
-                if self.AGV[i].last_loc is None:  # 只在初始化时last_loc为-1
-                    self.AGV[i].route.insert(0, self.AGV[i].location)
-                    self.AGV[i].last_loc = self.AGV[i].route[0]
-                else:
-                    self.AGV[i].route.insert(0, self.AGV[i].last_loc)
-                if len(self.AGV[i].route) >= 3:
-                    self.AGV[i].next_loc = self.AGV[i].route[2]
-                else:
-                    self.AGV[i].next_loc = self.AGV[i].location
+            if self.AGV[i].route:
+                if self.AGV[i].route[0] == self.AGV[i].location:
+                    if self.AGV[i].last_loc is None:  # 只在初始化时last_loc为-1
+                        self.AGV[i].route.insert(0, self.AGV[i].location)
+                        self.AGV[i].last_loc = self.AGV[i].route[0]
+                    else:
+                        self.AGV[i].route.insert(0, self.AGV[i].last_loc)
+                    if len(self.AGV[i].route) >= 3:
+                        self.AGV[i].next_loc = self.AGV[i].route[2]
+                    else:
+                        self.AGV[i].next_loc = self.AGV[i].location
 
     # 将路径赋予对应任务时，更新任务的路径序列：
     def update_task(self):

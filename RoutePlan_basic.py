@@ -216,7 +216,7 @@ class Routeplanner_basic:
                         assert agv_task_list[agv][0] == -(agv + 1) and agv_status_list[
                             agv] == 'return', f'agv{agv}, task_list_len = 1'
                     if online_tasks:  # 后续有任务
-                        if len(online_tasks) >= 2:  # 分配两个任务
+                        if len(online_tasks) - 2 >= (0 if agv == 3 else 1):  # 分配两个任务
                             if len(outer_dict[self.car2set[agv + 1]]) == 2:  # 剩余两个以上库位
                                 assign_task_1 = online_tasks.pop()  # 1st待分配的任务id
                                 assign_task_2 = online_tasks.pop()  # 2nd待分配的任务id
@@ -261,7 +261,7 @@ class Routeplanner_basic:
                                 task_dict[-int(agv+1)].route_seq = list(task_return)
                             else:  # 没有剩余库位
                                 new_task_dict[agv + 1] = agv_task_list[agv + 1]  # todo: check this out
-                        else:  # 只有一个在线任务
+                        else:  # 分配一个在线任务
                             if len(outer_dict[self.car2set[agv + 1]]) >= 1:  # 剩余一个库位
                                 assign_task = online_tasks.pop()  # 待分配的任务id
                                 end = (outer_dict[self.car2set[agv + 1]][0])
