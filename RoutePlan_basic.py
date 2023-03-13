@@ -53,9 +53,9 @@ class A_star:
         route = [self.found_end_node.node.id]
         current = self.found_end_node
         while True:
-            former = current.frontNode
-            route.append(former.node.id)
-            if former.node.id == self.start_point.id:
+            current = current.frontNode
+            route.append(current.node.id)
+            if current.node.id == self.start_point.id:
                 break
         return list(reversed(route))
 
@@ -198,10 +198,10 @@ class Routeplanner_basic:
 
         # 离线任务和车对应的字典
         agv2offlinetask = {
-            4: [i for i in offline_tasks if 1 <= i < 26],
-            5: [i for i in offline_tasks if 26 <= i < 51],
-            6: [i for i in offline_tasks if 51 <= i < 76],
-            7: [i for i in offline_tasks if 76 <= i < 101],
+            5: [i for i in offline_tasks if 1 <= i < 26],
+            6: [i for i in offline_tasks if 26 <= i < 51],
+            7: [i for i in offline_tasks if 51 <= i < 76],
+            8: [i for i in offline_tasks if 76 <= i < 101],
         }
         # 任务列表字典，路线列表字典
         new_task_dict = {i: None for i in range(1, 9)}
@@ -241,7 +241,7 @@ class Routeplanner_basic:
                                 # change task_dict
                                 task_dict[assign_task_1].route_seq = list(task_1_get) + list(task_1_put[1:])
                                 task_dict[assign_task_2].route_seq = list(task_2_get) + list(task_2_put[1:])
-                                task_dict[-int(agv)].route_seq = list(task_return)
+                                task_dict[-int(agv+1)].route_seq = list(task_return)
                             elif len(outer_dict[self.car2set[agv + 1]]) == 1:  # 剩余一个库位
                                 assign_task = online_tasks.pop()  # 待分配的任务id
                                 end = (outer_dict[self.car2set[agv + 1]][0])
@@ -258,7 +258,7 @@ class Routeplanner_basic:
                                     new_task_dict[agv + 1] = [-int(agv + 1), assign_task, -int(agv + 1)]
                                 # change task_dict
                                 task_dict[assign_task].route_seq = list(task_get) + list(task_put[1:])
-                                task_dict[-int(agv)].route_seq = list(task_return)
+                                task_dict[-int(agv+1)].route_seq = list(task_return)
                             else:  # 没有剩余库位
                                 new_task_dict[agv + 1] = agv_task_list[agv + 1]  # todo: check this out
                         else:  # 只有一个在线任务
@@ -278,7 +278,7 @@ class Routeplanner_basic:
                                     new_task_dict[agv + 1] = [-int(agv + 1), assign_task, -int(agv + 1)]
                                 # change task_dict
                                 task_dict[assign_task].route_seq = list(task_get) + list(task_put[1:])
-                                task_dict[-int(agv)].route_seq = list(task_return)
+                                task_dict[-int(agv+1)].route_seq = list(task_return)
                             else:
                                 new_task_dict[agv + 1] = agv_task_list[agv + 1]  # todo: check this out
                     else:  # 没有在线任务
@@ -299,7 +299,7 @@ class Routeplanner_basic:
                         new_task_dict[agv + 1] = [exec_task, assign_task, -int(agv + 1)]
                         # change task_dict
                         task_dict[assign_task].route_seq = list(task_get) + list(task_put[1:])
-                        task_dict[-int(agv)].route_seq = list(task_return)
+                        task_dict[-int(agv+1)].route_seq = list(task_return)
                     else:  # 不需要指派任务
                         new_task_dict[agv + 1] = agv_task_list[agv + 1]  # todo: check this out
                 elif len(agv_task_list[agv]) == 3:  # 当前三个任务在列表中
@@ -325,7 +325,7 @@ class Routeplanner_basic:
                             # change task_dict
                             task_dict[assign_task_1].route_seq = list(task_1_get) + list(task_1_put[1:])
                             task_dict[assign_task_2].route_seq = list(task_2_get) + list(task_2_put[1:])
-                            task_dict[-int(agv)].route_seq = list(task_return)
+                            task_dict[-int(agv+1)].route_seq = list(task_return)
                         elif len(online_tasks) >= 1 and len(outer_dict[self.car2set[agv + 1]]) >= 1:  # 指派一个任务
                             assign_task = online_tasks.pop()  # 待分配的任务id
                             end = (outer_dict[self.car2set[agv + 1]][0])
@@ -339,7 +339,7 @@ class Routeplanner_basic:
                             new_task_dict[agv + 1] = [-int(agv + 1), assign_task, -int(agv + 1)]
                             # change task_dict
                             task_dict[assign_task].route_seq = list(task_get) + list(task_put[1:])
-                            task_dict[-int(agv)].route_seq = list(task_return)
+                            task_dict[-int(agv+1)].route_seq = list(task_return)
                         else:
                             new_task_dict[agv + 1] = agv_task_list[agv + 1]  # todo: check this out
                     else:  # 当前有任务在执行
@@ -359,7 +359,7 @@ class Routeplanner_basic:
                             new_task_dict[agv + 1] = [exec_task, assign_task, -int(agv + 1)]
                             # change task_dict
                             task_dict[assign_task].route_seq = list(task_get) + list(task_put[1:])
-                            task_dict[-int(agv)].route_seq = list(task_return)
+                            task_dict[-int(agv+1)].route_seq = list(task_return)
                         else:
                             new_task_dict[agv + 1] = agv_task_list[agv + 1]  # todo: check this out
                 else:
@@ -388,7 +388,7 @@ class Routeplanner_basic:
                         # change task_dict
                         task_dict[assign_task_1].route_seq = list(task_1_get) + list(task_1_put[1:])
                         task_dict[assign_task_2].route_seq = list(task_2_get) + list(task_2_put[1:])
-                        task_dict[-int(agv)].route_seq = list(task_return)
+                        task_dict[-int(agv+1)].route_seq = list(task_return)
                     elif len(online_tasks) >= 1 and len(outer_dict[self.car2set[agv + 1]]) >= 1:  # 指派一个任务
                         assign_task = online_tasks.pop()  # 待分配的任务id
                         end = (outer_dict[self.car2set[agv + 1]][0])
@@ -402,7 +402,7 @@ class Routeplanner_basic:
                         new_task_dict[agv + 1] = [-int(agv + 1), assign_task, -int(agv + 1)]
                         # change task_dict
                         task_dict[assign_task].route_seq = list(task_get) + list(task_put[1:])
-                        task_dict[-int(agv)].route_seq = list(task_return)
+                        task_dict[-int(agv+1)].route_seq = list(task_return)
                     else:
                         new_task_dict[agv + 1] = agv_task_list[agv + 1]  # todo: check this out
             else:  # 离线任务
@@ -436,7 +436,7 @@ class Routeplanner_basic:
                             # change task_dict
                             task_dict[assign_task_1].route_seq = list(task_1_get) + list(task_1_put[1:])
                             task_dict[assign_task_2].route_seq = list(task_2_get) + list(task_2_put[1:])
-                            task_dict[-int(agv)].route_seq = list(task_return)
+                            task_dict[-int(agv+1)].route_seq = list(task_return)
                         elif len(agv2offlinetask[agv + 1]) >= 1:  # 分配一个任务
                             assign_task = agv2offlinetask[agv + 1].pop()  # 待分配的任务id
                             task_get = self.get_route(start=self.park_list[agv],
@@ -451,7 +451,7 @@ class Routeplanner_basic:
                                 new_task_dict[agv + 1] = [-int(agv + 1), assign_task, -int(agv + 1)]
                             # change task_dict
                             task_dict[assign_task].route_seq = list(task_get) + list(task_put[1:])
-                            task_dict[-int(agv)].route_seq = list(task_return)
+                            task_dict[-int(agv+1)].route_seq = list(task_return)
                     else:  # 没有后续任务
                         new_task_dict[agv + 1] = agv_task_list[agv + 1]  # todo: check this out
                 elif len(agv_task_list[agv]) == 2:  # 只有一个当前任务在执行
@@ -468,7 +468,7 @@ class Routeplanner_basic:
                         new_task_dict[agv + 1] = [exec_task, assign_task, -int(agv + 1)]
                         # change task_dict
                         task_dict[assign_task].route_seq = list(task_get) + list(task_put[1:])
-                        task_dict[-int(agv)].route_seq = list(task_return)
+                        task_dict[-int(agv+1)].route_seq = list(task_return)
                     else:  # 不需要指派任务
                         new_task_dict[agv + 1] = agv_task_list[agv + 1]  # todo: check this out
                 elif len(agv_task_list[agv]) == 3:  # 当前三个任务在列表中
@@ -492,7 +492,7 @@ class Routeplanner_basic:
                             # change task_dict
                             task_dict[assign_task_1].route_seq = list(task_1_get) + list(task_1_put[1:])
                             task_dict[assign_task_2].route_seq = list(task_2_get) + list(task_2_put[1:])
-                            task_dict[-int(agv)].route_seq = list(task_return)
+                            task_dict[-int(agv+1)].route_seq = list(task_return)
                         elif len(agv2offlinetask[agv + 1]) >= 1:  # 指派一个任务
                             assign_task = agv2offlinetask[agv + 1].pop()  # 待分配的任务id
                             task_get = self.get_route(start=self.park_list[agv],
@@ -504,7 +504,7 @@ class Routeplanner_basic:
                             new_task_dict[agv + 1] = [-int(agv + 1), assign_task, -int(agv + 1)]
                             # change task_dict
                             task_dict[assign_task].route_seq = list(task_get) + list(task_put[1:])
-                            task_dict[-int(agv)].route_seq = list(task_return)
+                            task_dict[-int(agv+1)].route_seq = list(task_return)
                         else:  # 没有任务可以指派
                             new_task_dict[agv + 1] = agv_task_list[agv + 1]  # todo: check this out
                     else:  # 当前有任务在执行
@@ -522,7 +522,7 @@ class Routeplanner_basic:
                             new_task_dict[agv + 1] = [exec_task, assign_task, -int(agv + 1)]
                             # change task_dict
                             task_dict[assign_task].route_seq = list(task_get) + list(task_put[1:])
-                            task_dict[-int(agv)].route_seq = list(task_return)
+                            task_dict[-int(agv+1)].route_seq = list(task_return)
                         else:
                             new_task_dict[agv + 1] = agv_task_list[agv + 1]  # todo: check this out
                 else:  # 当前列表中有四个任务, [-agv, 1, 2, -agv]
@@ -548,7 +548,7 @@ class Routeplanner_basic:
                         # change task_dict
                         task_dict[assign_task_1].route_seq = list(task_1_get) + list(task_1_put[1:])
                         task_dict[assign_task_2].route_seq = list(task_2_get) + list(task_2_put[1:])
-                        task_dict[-int(agv)].route_seq = list(task_return)
+                        task_dict[-int(agv+1)].route_seq = list(task_return)
                     elif len(agv2offlinetask[agv + 1]) >= 1:  # 指派一个任务
                         assign_task = agv2offlinetask[agv + 1].pop()  # 待分配的任务id
                         task_get = self.get_route(start=self.park_list[agv],
@@ -560,7 +560,7 @@ class Routeplanner_basic:
                         new_task_dict[agv + 1] = [-int(agv + 1), assign_task, -int(agv + 1)]
                         # change task_dict
                         task_dict[assign_task].route_seq = list(task_get) + list(task_put[1:])
-                        task_dict[-int(agv)].route_seq = list(task_return)
+                        task_dict[-int(agv+1)].route_seq = list(task_return)
                     else:
                         new_task_dict[agv + 1] = agv_task_list[agv + 1]  # todo: check this out
 
