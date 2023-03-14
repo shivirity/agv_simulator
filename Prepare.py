@@ -271,17 +271,17 @@ class Problem:
         for i in range(len(self.AGV)):
             if self.AGV[i+1].status == 'get_arriving' and self.move_status[i] == 0:
                 self.AGV[i+1].task_status = 'put'
-                self.AGV[i+1].is_load = 1
+                # self.AGV[i+1].is_load = 1
                 if self.Map[self.Task[self.AGV[i+1].task].start].state is not None:
                     self.Map[self.Task[self.AGV[i+1].task].start].state -= 1
             if self.move_status[i] == 0 and self.AGV[i+1].status != 'busy' and self.AGV[i+1].status != 'idle' \
-                    and self.AGV[i+1].status != 'put_arriving':
+                    and self.AGV[i+1].status != 'put_arriving' and self.AGV[i+1].status != 'turning':
                 if self.AGV[i+1].next_loc != self.AGV[i+1].location:
                     self.AGV[i+1].status = 'busy'
                 else:
                     self.AGV[i+1].status = 'idle'
             if self.AGV[i+1].status == 'put_arriving' and self.move_status[i] == 0:
-                self.AGV[i+1].is_load = 0
+                # self.AGV[i+1].is_load = 0
                 self.Map[self.Task[self.AGV[i+1].task].end].state += 1
                 self.Task[self.AGV[i+1].task].state = 3  # 代表当前任务完成
                 self.AGV[i+1].tasklist.pop(0)
@@ -299,6 +299,13 @@ class Problem:
                         self.Task_order[i+1].pop(0)
                     self.AGV[i+1].task_status = 'get'
                     self.AGV[i+1].status = 'busy'
+
+    # 返回所有AGV的实时任务执行状态
+    def get_agv_status(self):
+        status_list = []
+        for i in range(len(self.AGV)):
+            status_list.append(self.AGV[i+1].status)
+        return status_list
 
     # 返回所有AGV的实时任务执行状态
     def get_agv_task_status(self):
@@ -363,11 +370,15 @@ class Problem:
         for i in range(len(self.AGV)):
             if self.AGV[i+1].task:
                 task_now = self.Task[self.AGV[i+1].task]
-                if self.AGV[i+1].location == task_now.start and self.AGV[i+1].status != 'get_arriving':
+                if self.AGV[i+1].location == task_now.start and self.AGV[i+1].is_load == 0 and \
+                        self.AGV[i+1].status != 'get_arriving':
                     self.AGV[i+1].status = 'get_arriving'
+                    self.AGV[i+1].is_load = 1  # 用于到达后的起步判断了
                     self.Map[self.Task[self.AGV[i+1].task].start].reservation = False
                     self.move_status[i] += self.cargo_time  # 等待时间加上一个取、卸货的时间
-                if self.AGV[i+1].location == task_now.end and self.AGV[i+1].status != 'put_arriving':
+                if self.AGV[i+1].location == task_now.end and self.AGV[i+1].is_load == 1 and \
+                        self.AGV[i+1].status != 'put_arriving':
+                    self.AGV[i+1].is_load = 0  # 用于到达后的起步判断了
                     self.AGV[i+1].status = 'put_arriving'
                     self.Map[self.Task[self.AGV[i+1].task].end].reservation = False
                     # 完成当前任务, 将当前任务从列表中pop出，但task属性还是需要判断是否在执行return任务

@@ -67,3 +67,5 @@ if __name__ == '__main__':
         # 系统动态更新
         problem.run_step()
         logger_main.info(f'time = {problem.time}')
+        logger_main.info(f'current_agv_location = {problem.get_agv_location()}')
+        logger_main.info(f'current_agv_status = {problem.get_agv_status()}')
