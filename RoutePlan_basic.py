@@ -287,7 +287,7 @@ class Routeplanner_basic:
                             else:
                                 new_task_dict[agv + 1] = agv_task_list[agv + 1]  # todo: check this out
                     else:  # 没有在线任务
-                        new_task_dict[agv + 1] = agv_task_list[agv + 1]  # todo: check this out
+                        new_task_dict[agv + 1] = agv_task_list[agv]  # todo: check this out
                 elif len(agv_task_list[agv]) == 2:  # 只有一个当前任务在执行
                     assert agv_status_list[agv] in ('get', 'put')
                     if len(online_tasks) >= 1 and len(outer_dict[self.car2set[agv + 1]]) >= 1:  # 指派一个任务

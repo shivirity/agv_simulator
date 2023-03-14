@@ -75,3 +75,5 @@ if __name__ == '__main__':
         logger.warning(f'loc={problem.AGV[4].location}')
         logger.warning(f'next_loc={problem.AGV[4].next_loc}')
         logger.warning(f'tasklist={problem.AGV[4].tasklist}')
+        logger.warning(f'end={problem.Task[102].end}')
+        logger.warning(f'state={problem.Task[102].state}')

@@ -150,15 +150,22 @@ class Problem:
     def renew_task_online(self, dict_task_simultaneous):
         num = len(dict_task_simultaneous) - 8
         p = num
-        while self.time >= self.online_task_arrival_352[0]:
-            num += 1
-            dict_task_simultaneous[num] = Task(num, self.online_task_arrival_352[0], 1, 352, None, 0, None)
-            self.online_task_arrival_352.pop(0)
+        if self.online_task_arrival_352:
+            while self.time >= self.online_task_arrival_352[0]:
+                num += 1
+                dict_task_simultaneous[num] = Task(num, self.online_task_arrival_352[0], 1, 352, None, 0, None)
+                self.online_task_arrival_352.pop(0)
+                if not self.online_task_arrival_352:
+                    break
 
-        while self.time >= self.online_task_arrival_356[0]:
-            num += 1
-            dict_task_simultaneous[num] = Task(num, self.online_task_arrival_356[0], 1, 356, None, 0, None)
-            self.online_task_arrival_356.pop(0)
+        if self.online_task_arrival_356:
+            while self.time >= self.online_task_arrival_356[0]:
+                num += 1
+                dict_task_simultaneous[num] = Task(num, self.online_task_arrival_356[0], 1, 356, None, 0, None)
+                self.online_task_arrival_356.pop(0)
+                if not self.online_task_arrival_356:
+                    break
+
         if p == num:
             self.online_task_arrival = False
         else:
@@ -348,7 +355,7 @@ class Problem:
     def get_task_not_perform(self):
         not_perform_list = []
         for i in range(1, len(self.Task) - 7):
-            if self.Task[i].state == 0 or 1:
+            if self.Task[i].state == 0 or self.Task[i].state == 1:
                 not_perform_list.append(i)
         return not_perform_list
 
