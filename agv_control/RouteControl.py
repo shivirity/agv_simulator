@@ -1,5 +1,33 @@
 import copy
+import colorlog
 import logging
+
+# set logger
+log_colors_config = {
+    'DEBUG': 'cyan',
+    'INFO': 'green',
+    'WARNING': 'yellow',
+    'ERROR': 'red',
+    'CRITICAL': 'bold_red',
+}
+logger = logging.getLogger("logger")
+logger.setLevel(logging.DEBUG)
+sh = logging.StreamHandler()
+sh.setLevel(logging.INFO)
+fh = logging.FileHandler(filename='run_file.log', mode='w', encoding='utf-8')
+fh.setLevel(logging.DEBUG)
+stream_fmt = colorlog.ColoredFormatter(
+    fmt="%(log_color)s[%(asctime)s] - %(filename)-8s - %(levelname)-7s - line %(lineno)s - %(message)s",
+    log_colors=log_colors_config)
+file_fmt = logging.Formatter(
+    fmt="[%(asctime)s] - %(name)s - %(levelname)-5s - %(filename)-8s : line %(lineno)s - %(funcName)s - %(message)s"
+    , datefmt="%Y/%m/%d %H:%M:%S")
+sh.setFormatter(stream_fmt)
+fh.setFormatter(file_fmt)
+logger.addHandler(sh)
+logger.addHandler(fh)
+sh.close()
+fh.close()
 
 NUM_OF_NODES = 829
 NUM_OF_AGVS = 8
@@ -61,9 +89,12 @@ class RouteController:
         if former_route is not None:
             former_route = list(former_route)
             for grid in former_route:
-                self.hash_route[grid].remove(agv)
+                if agv in self.hash_route[grid]:
+                    self.hash_route[grid].remove(agv)
             # add new route
             for grid in self.residual_routes[agv]:
+                if self.hash_route[grid] == 0:
+                    self.hash_route[grid] = [agv]
                 if agv not in self.hash_route[grid]:
                     self.hash_route[grid].append(agv)
                 assert self.hash_route[grid].count(agv) == 1
@@ -135,7 +166,7 @@ class RouteController:
             former_route = list(self.residual_routes[key])
             self.residual_routes[key] = route  # update剩余路径
             self._update_hash_route(agv=key, former_route=former_route)  # update路径hash
-            logging.warning(f'AGV{key} route updated.')
+            logger.info(f'AGV{key} route updated.')
         # 更新 hash_route 和 residual_route
         self._init_shared_routes()
 
@@ -169,7 +200,8 @@ class RouteController:
             for agv in range(self.num_of_agv):
                 # 没有剩余路径，需要更新或指示任务完成
                 if len(self.residual_routes[agv]) == 0:
-                    logging.warning(f'AGV{agv} needs to update residual route.')
+                    # logging.warning(f'AGV{agv} needs to update residual route.')
+                    pass
                 # 有剩余路径
                 else:
                     # 如果前进，则删去shared route里的对应元素（如果存在）
@@ -179,24 +211,27 @@ class RouteController:
                             assert del_idx == 0
                             self.shared_routes[agv].pop(del_idx)
                             self.shared_agvs[agv].pop(del_idx)
-                    # check 其他车辆前进
-                    for idx in range(len(self.shared_routes[agv])):
-                        # update due to moving forward
-                        if self._is_list_contained(
-                                lists=self.shared_agvs[agv][idx],
-                                listl=self.hash_route[self.shared_routes[agv][idx]]):
-                            assert len(self.hash_route[self.shared_routes[agv][idx]]) == len(
-                                self.shared_agvs[agv][idx]) + 1
-                        else:
-                            # delete
-                            if len(self.hash_route[self.shared_routes[agv][idx]]) == 1:
-                                self.shared_routes[agv] = self.shared_routes[agv][:idx]
-                                self.shared_agvs[agv] = self.shared_agvs[agv][:idx]
-                            # update grid
+
+                    if not self.shared_routes[agv]:
+                        # check 其他车辆前进
+                        for _idx in range(len(self.shared_routes[agv])):
+                            # update due to moving forward
+                            assert _idx < len(self.shared_agvs[agv])
+                            if self._is_list_contained(
+                                    lists=self.shared_agvs[agv][_idx],
+                                    listl=self.hash_route[self.shared_routes[agv][_idx]]):
+                                assert len(self.hash_route[self.shared_routes[agv][_idx]]) == len(
+                                    self.shared_agvs[agv][_idx]) + 1
                             else:
-                                for ano_agv in self.shared_agvs[agv][idx]:
-                                    if ano_agv not in self.hash_route[self.shared_routes[agv][idx]]:
-                                        self.shared_agvs[agv][idx].remove(ano_agv)
+                                # delete
+                                if len(self.hash_route[self.shared_routes[agv][_idx]]) == 1:
+                                    self.shared_routes[agv] = self.shared_routes[agv][:_idx]
+                                    self.shared_agvs[agv] = self.shared_agvs[agv][:_idx]
+                                # update grid
+                                else:
+                                    for ano_agv in self.shared_agvs[agv][_idx]:
+                                        if ano_agv not in self.hash_route[self.shared_routes[agv][_idx]]:
+                                            self.shared_agvs[agv][_idx].remove(ano_agv)
 
                 # 若 shared_route 为空，则更新下一段最新的
                 if len(self.shared_routes[agv]) == 0 and self.update_shared_flag[agv]:
@@ -212,7 +247,7 @@ class RouteController:
             else:  # agv可以行驶
                 if not len(self.residual_routes[agv]):
                     control_list.append(False)
-                    logging.warning(f'AGV{agv} has no residual route.')
+                    # logging.warning(f'AGV{agv} has no residual route.')
                 else:  # 车辆有剩余路径
                     next_step = self.residual_routes[agv][0]
                     # 权限申请条件1

@@ -1,9 +1,31 @@
+import logging
+import colorlog
+
 from Prepare import Problem
 from initialize import dictionary_task, dictionary_car, dictionary_task_online_ending_order
 from Map import dictionary_map
 
 from agv_control.RouteControl import RouteController
 from RoutePlan_basic import Routeplanner_basic
+
+# set logger
+log_colors_config = {
+    'DEBUG': 'cyan',
+    'INFO': 'green',
+    'WARNING': 'yellow',
+    'ERROR': 'red',
+    'CRITICAL': 'bold_red',
+}
+logger = logging.getLogger("logger")
+logger.setLevel(logging.DEBUG)
+sh = logging.StreamHandler()
+sh.setLevel(logging.INFO)
+stream_fmt = colorlog.ColoredFormatter(
+    fmt="%(log_color)s[%(asctime)s] - %(filename)-8s - %(levelname)-7s - line %(lineno)s - %(message)s",
+    log_colors=log_colors_config)
+sh.setFormatter(stream_fmt)
+logger.addHandler(sh)
+sh.close()
 
 if __name__ == '__main__':
 
@@ -44,4 +66,4 @@ if __name__ == '__main__':
 
         # 系统动态更新
         problem.run_step()
-        # problem.time += problem.step
+        logger.info(f'time = {problem.time}')

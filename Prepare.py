@@ -1,10 +1,37 @@
 import random
 import numpy as np
 import pandas as pd
-
 import logging
+import colorlog
+
+# set logger
+log_colors_config = {
+    'DEBUG': 'cyan',
+    'INFO': 'green',
+    'WARNING': 'yellow',
+    'ERROR': 'red',
+    'CRITICAL': 'bold_red',
+}
+logger = logging.getLogger("logger")
+logger.setLevel(logging.DEBUG)
+sh = logging.StreamHandler()
+sh.setLevel(logging.INFO)
+fh = logging.FileHandler(filename='run_file.log', mode='w', encoding='utf-8')
+fh.setLevel(logging.DEBUG)
+stream_fmt = colorlog.ColoredFormatter(
+    fmt="%(log_color)s[%(asctime)s] - %(filename)-8s - %(levelname)-7s - line %(lineno)s - %(message)s",
+    log_colors=log_colors_config)
+file_fmt = logging.Formatter(
+    fmt="[%(asctime)s] - %(name)s - %(levelname)-5s - %(filename)-8s : line %(lineno)s - %(funcName)s - %(message)s"
+    , datefmt="%Y/%m/%d %H:%M:%S")
+sh.setFormatter(stream_fmt)
+fh.setFormatter(file_fmt)
+logger.addHandler(sh)
+logger.addHandler(fh)
+sh.close()
+fh.close()
+
 random.seed(42)
-logging.basicConfig(level=logging.INFO)
 # todo task不存在时不再记为-1 记为None
 
 
@@ -45,7 +72,8 @@ def dfs(graph, n_i, color, circle_list, have_circle, circle):
     return have_circle
 
 
-def findcircle(graph):
+def findcircle(graph) -> list:
+    """"""
     # color = 0 该节点暂未访问
     # color = -1 该节点访问了一次
     # color = 1 该节点的所有孩子节点都已访问,就不会再对它做DFS了
@@ -97,7 +125,7 @@ class Task:
 class Problem:
     __speed = 1
     step = 2
-    alpha = 0.05  # 一类误差产生的概率
+    alpha = 0.001  # 一类误差产生的概率
     beta = 0.001  # 二类误差产生的概率
     cargo_time = 5  # 取、卸货的时间步长
 
@@ -204,6 +232,7 @@ class Problem:
         if have_circle:
             for i in range(len(have_circle)):
                 self.deadlock_times += 1
+                logger.error(f'deadlock occurs between {have_circle}')
                 list_deadlock = [x.index(node) for node in have_circle[i]]
                 self.deadlock[self.deadlock_times] = list_deadlock
 
@@ -212,14 +241,14 @@ class Problem:
         # Type 1: low battery
         for i in range(len(self.AGV)):
             if random.random() < self.alpha and self.move_status[i] == 0:
-                logging.info(f'error occurred for agv{i+1} because of low battery.')
+                logger.info(f'error occurred for agv{i+1} because of low battery.')
                 self.move_status[i] += 1
                 self.AGV[i+1].status = 'stop_low_battery'
 
         # Type 2: blocked or broken
         for i in range(len(self.AGV)):
             if random.random() < self.beta:
-                logging.info(f'error occurred for agv{i+1} because of blocked or broken.')
+                logger.warning(f'error occurred for agv{i+1} because of blocked or broken.')
                 self.move_status[i] += 10
                 self.AGV[i+1].status = 'down'
 
