@@ -10,24 +10,16 @@ log_colors_config = {
     'ERROR': 'red',
     'CRITICAL': 'bold_red',
 }
-logger = logging.getLogger("logger")
-logger.setLevel(logging.DEBUG)
+logger_rc = logging.getLogger("logger_rc")
+logger_rc.setLevel(logging.DEBUG)
 sh = logging.StreamHandler()
 sh.setLevel(logging.INFO)
-fh = logging.FileHandler(filename='run_file.log', mode='w', encoding='utf-8')
-fh.setLevel(logging.DEBUG)
 stream_fmt = colorlog.ColoredFormatter(
     fmt="%(log_color)s[%(asctime)s] - %(filename)-8s - %(levelname)-7s - line %(lineno)s - %(message)s",
     log_colors=log_colors_config)
-file_fmt = logging.Formatter(
-    fmt="[%(asctime)s] - %(name)s - %(levelname)-5s - %(filename)-8s : line %(lineno)s - %(funcName)s - %(message)s"
-    , datefmt="%Y/%m/%d %H:%M:%S")
 sh.setFormatter(stream_fmt)
-fh.setFormatter(file_fmt)
-logger.addHandler(sh)
-logger.addHandler(fh)
+logger_rc.addHandler(sh)
 sh.close()
-fh.close()
 
 NUM_OF_NODES = 829
 NUM_OF_AGVS = 8
@@ -166,7 +158,7 @@ class RouteController:
             former_route = list(self.residual_routes[key])
             self.residual_routes[key] = route  # update剩余路径
             self._update_hash_route(agv=key, former_route=former_route)  # update路径hash
-            logger.info(f'AGV{key} route updated.')
+            logger_rc.info(f'AGV{key} route updated.')
         # 更新 hash_route 和 residual_route
         self._init_shared_routes()
 

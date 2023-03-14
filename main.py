@@ -16,15 +16,15 @@ log_colors_config = {
     'ERROR': 'red',
     'CRITICAL': 'bold_red',
 }
-logger = logging.getLogger("logger")
-logger.setLevel(logging.DEBUG)
+logger_main = logging.getLogger("logger_main")
+logger_main.setLevel(logging.DEBUG)
 sh = logging.StreamHandler()
 sh.setLevel(logging.INFO)
 stream_fmt = colorlog.ColoredFormatter(
     fmt="%(log_color)s[%(asctime)s] - %(filename)-8s - %(levelname)-7s - line %(lineno)s - %(message)s",
     log_colors=log_colors_config)
 sh.setFormatter(stream_fmt)
-logger.addHandler(sh)
+logger_main.addHandler(sh)
 sh.close()
 
 if __name__ == '__main__':
@@ -66,4 +66,4 @@ if __name__ == '__main__':
 
         # 系统动态更新
         problem.run_step()
-        logger.info(f'time = {problem.time}')
+        logger_main.info(f'time = {problem.time}')
