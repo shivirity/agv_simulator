@@ -20,7 +20,7 @@ class Grid:
         else:
             self.state = state  # 节点的库存配置状态，None代表道路节点，0 代表无货，>= 1 代表有货，-1 代表被预约
         if conflict_list == [-1]:
-            self.conflict = None
+            self.conflict = []
         else:
             self.conflict = conflict_list  # 每个节点的冲突节点列表，None为路径节点，列表为库位节点
 

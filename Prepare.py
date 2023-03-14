@@ -149,7 +149,7 @@ class Problem:
         agvs_set = set()
         agvs_list = []
         for i in range(len(self.AGV)):
-            if self.move_status[i] == 0:
+            if self.move_status[i] == 0 and self.AGV[i+1].last_loc is not None:
                 agvs_set.add(self.AGV[i+1].next_loc)
                 agvs_list.append(self.AGV[i+1].next_loc)
             else:
@@ -236,8 +236,9 @@ class Problem:
                     self.AGV[i+1].next_loc = self.AGV[i+1].route[2]
                 else:  # 应该进不了这个判断
                     self.AGV[i+1].next_loc = self.AGV[i+1].location
-            elif instruction[i] is False and self.move_status == 0:  # instruction[i] and self.move_status != 0:
-                self.AGV[i+1].status = 'waiting'  # 该前进但需要等待
+            elif instruction[i] is False and self.move_status[i] == 0:  # instruction[i] and self.move_status != 0:
+                if self.AGV[i+1].route:  # route为空则说明还没接到任务，控制器能判断出来
+                    self.AGV[i+1].status = 'waiting'  # 该前进但需要等待
                 self.moving_success[i] = False
             else:  # 该前进但因误差导致无法前进 or 本就无法前进
                 self.moving_success[i] = False
@@ -252,7 +253,8 @@ class Problem:
                 self.AGV[i+1].is_load = 1
                 if self.Map[self.Task[self.AGV[i+1].task].start].state is not None:
                     self.Map[self.Task[self.AGV[i+1].task].start].state -= 1
-            if self.move_status[i] == 0 and (self.AGV[i+1].status != 'busy' or 'idle' or 'put_arriving'):
+            if self.move_status[i] == 0 and self.AGV[i+1].status != 'busy' and self.AGV[i+1].status != 'idle' \
+                    and self.AGV[i+1].status != 'put_arriving':
                 if self.AGV[i+1].next_loc != self.AGV[i+1].location:
                     self.AGV[i+1].status = 'busy'
                 else:
@@ -378,15 +380,16 @@ class Problem:
     # 车辆转弯的判断
     def turning_identify(self):
         for i in range(len(self.AGV)):
-            l_x = self.Map[self.AGV[i+1].last_loc].x
-            l_y = self.Map[self.AGV[i+1].last_loc].y
-            n_x = self.Map[self.AGV[i+1].next_loc].x
-            n_y = self.Map[self.AGV[i+1].next_loc].y
-            if abs(l_x-n_x) > 0.6 and l_y != n_y and self.AGV[i+1].status != 'turning':
-                self.AGV[i+1].status = 'turning'
-                self.move_status[i] += 1
-            elif abs(l_x-n_x) > 0.6 and l_y != n_y and self.AGV[i+1].status == 'turning':
-                self.AGV[i+1].status = 'busy'
+            if self.AGV[i+1].last_loc is not None:
+                l_x = self.Map[self.AGV[i+1].last_loc].x
+                l_y = self.Map[self.AGV[i+1].last_loc].y
+                n_x = self.Map[self.AGV[i+1].next_loc].x
+                n_y = self.Map[self.AGV[i+1].next_loc].y
+                if abs(l_x-n_x) > 0.6 and l_y != n_y and self.AGV[i+1].status != 'turning':
+                    self.AGV[i+1].status = 'turning'
+                    self.move_status[i] += 1
+                elif abs(l_x-n_x) > 0.6 and l_y != n_y and self.AGV[i+1].status == 'turning':
+                    self.AGV[i+1].status = 'busy'
 
     # 将任务及路径分配给叉车时，更新叉车属性：
     def update_car(self, task_dict):
