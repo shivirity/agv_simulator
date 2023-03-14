@@ -16,15 +16,15 @@ log_colors_config = {
     'ERROR': 'red',
     'CRITICAL': 'bold_red',
 }
-logger_main = logging.getLogger("logger_main")
-logger_main.setLevel(logging.DEBUG)
+logger = logging.getLogger("logger_main")
+logger.setLevel(logging.DEBUG)
 sh = logging.StreamHandler()
 sh.setLevel(logging.INFO)
 stream_fmt = colorlog.ColoredFormatter(
     fmt="%(log_color)s[%(asctime)s] - %(filename)-8s - %(levelname)-7s - line %(lineno)s - %(message)s",
     log_colors=log_colors_config)
 sh.setFormatter(stream_fmt)
-logger_main.addHandler(sh)
+logger.addHandler(sh)
 sh.close()
 
 if __name__ == '__main__':
@@ -66,6 +66,12 @@ if __name__ == '__main__':
 
         # 系统动态更新
         problem.run_step()
-        logger_main.info(f'time = {problem.time}')
-        logger_main.info(f'current_agv_location = {problem.get_agv_location()}')
-        logger_main.info(f'current_agv_status = {problem.get_agv_status()}')
+        logger.info(f'time={problem.time}')
+        if problem.time == 932:
+            logger.debug('here')
+        logger.info(f'current_agv_location={problem.get_agv_location()}')
+        logger.info(f'current_agv_location = {problem.get_agv_location()}')
+        logger.info(f'current_agv_status = {problem.get_agv_status()}')
+        logger.warning(f'loc={problem.AGV[4].location}')
+        logger.warning(f'next_loc={problem.AGV[4].next_loc}')
+        logger.warning(f'tasklist={problem.AGV[4].tasklist}')

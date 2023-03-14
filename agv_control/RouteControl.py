@@ -10,15 +10,15 @@ log_colors_config = {
     'ERROR': 'red',
     'CRITICAL': 'bold_red',
 }
-logger_rc = logging.getLogger("logger_rc")
-logger_rc.setLevel(logging.DEBUG)
+logger = logging.getLogger("logger_rc")
+logger.setLevel(logging.DEBUG)
 sh = logging.StreamHandler()
 sh.setLevel(logging.INFO)
 stream_fmt = colorlog.ColoredFormatter(
     fmt="%(log_color)s[%(asctime)s] - %(filename)-8s - %(levelname)-7s - line %(lineno)s - %(message)s",
     log_colors=log_colors_config)
 sh.setFormatter(stream_fmt)
-logger_rc.addHandler(sh)
+logger.addHandler(sh)
 sh.close()
 
 NUM_OF_NODES = 829
@@ -41,7 +41,7 @@ class RouteController:
 
         # 全局变量
         self.reservation = None  # PR哈希, -1 -> 未预定, >=0 -> 被对应编号预定
-        self.hash_route = [0 for _ in range(self.num_of_nodes)]  # list
+        self.hash_route = [0 for _ in range(self.num_of_nodes+1)]  # list
         self.update_shared_flag = [True for _ in range(self.num_of_agv)]
 
         # 计算相关
@@ -133,7 +133,7 @@ class RouteController:
 
     def _update_reservation(self, loc_list: list) -> None:
         """利用当前位置更新预定，仅保留当前位置"""
-        self.reservation = [-1 if i not in loc_list else loc_list.index(i) for i in range(self.num_of_nodes)]
+        self.reservation = [-1 if i not in loc_list else loc_list.index(i) for i in range(self.num_of_nodes+1)]
 
     def _is_shared_reserved(self, agv) -> bool:
         """
@@ -143,7 +143,8 @@ class RouteController:
         :return: 被其他车辆预定返回True，否则返回False
         """
         for grid in self.shared_routes[agv]:
-            assert self.reservation[grid] != agv
+            if self.reservation[grid] == agv:
+                assert len([i for i in range(len(self.reservation)) if self.reservation[i] == agv]) == 1
             if self.reservation[grid] >= 0:
                 return True
         else:
@@ -158,7 +159,7 @@ class RouteController:
             former_route = list(self.residual_routes[key])
             self.residual_routes[key] = route  # update剩余路径
             self._update_hash_route(agv=key, former_route=former_route)  # update路径hash
-            logger_rc.info(f'AGV{key} route updated.')
+            logger.info(f'AGV{key} route updated.')
         # 更新 hash_route 和 residual_route
         self._init_shared_routes()
 
@@ -174,6 +175,8 @@ class RouteController:
 
         # 更新 reservation
         loc_list = list(loc_list)
+        for loc in loc_list:
+            assert loc is not None, f'{loc}'
         self._update_reservation(loc_list=loc_list)
 
         if step_list is not None:
@@ -182,9 +185,11 @@ class RouteController:
             for agv in range(self.num_of_agv):
                 if step_list[agv]:  # 前进节点
                     assert len(self.residual_routes[agv]) > 0
+                    assert agv in self.hash_route[self.residual_routes[agv][0]], f'{self.hash_route[self.residual_routes[agv][0]]}'
                     step_grid = self.residual_routes[agv].pop(0)  # update residual_routes
                     step_grid_list.append(step_grid)
-                    self.hash_route[step_grid].remove(agv)  # update hash_route
+                    if step_grid not in self.residual_routes[agv]:
+                        self.hash_route[step_grid].remove(agv)  # update hash_route
                 else:  # 未前进节点
                     step_grid_list.append(-1)
 

@@ -192,8 +192,14 @@ class Routeplanner_basic:
         agv_status_list, task_to_plan = list(agv_status_list), list(task_to_plan)
         agv_task_list = copy.deepcopy(agv_task_list)
 
+        # element check
+        for task_list in agv_task_list:
+            assert isinstance(task_list, list)
+
+        cur_task_list = [i[0] for i in agv_task_list if len(i) > 0]
         offline_tasks = [i for i in task_to_plan if i < 101]
         online_tasks = list(sorted([i for i in task_to_plan if i > 100]))
+        online_tasks = [i for i in online_tasks if i not in cur_task_list]
 
         # 离线任务和车对应的字典
         agv2offlinetask = {
@@ -217,8 +223,8 @@ class Routeplanner_basic:
                     if online_tasks:  # 后续有任务
                         if len(online_tasks) - 2 >= (0 if agv == 3 else 1):  # 分配两个任务
                             if len(outer_dict[self.car2set[agv + 1]]) == 2:  # 剩余两个以上库位
-                                assign_task_1 = online_tasks.pop()  # 1st待分配的任务id
-                                assign_task_2 = online_tasks.pop()  # 2nd待分配的任务id
+                                assign_task_1 = online_tasks.pop(0)  # 1st待分配的任务id
+                                assign_task_2 = online_tasks.pop(0)  # 2nd待分配的任务id
                                 end_1, end_2 = (outer_dict[self.car2set[agv + 1]][i] for i in range(2))
                                 task_dict[assign_task_1].end, task_dict[assign_task_2].end = end_1, end_2
                                 task_1_get = self.get_route(start=self.park_list[agv],
@@ -242,7 +248,7 @@ class Routeplanner_basic:
                                 task_dict[assign_task_2].route_seq = list(task_2_get) + list(task_2_put[1:])
                                 task_dict[-int(agv+1)].route_seq = list(task_return)
                             elif len(outer_dict[self.car2set[agv + 1]]) == 1:  # 剩余一个库位
-                                assign_task = online_tasks.pop()  # 待分配的任务id
+                                assign_task = online_tasks.pop(0)  # 待分配的任务id
                                 end = (outer_dict[self.car2set[agv + 1]][0])
                                 task_dict[assign_task].end = end
                                 task_get = self.get_route(start=self.park_list[agv],
@@ -262,7 +268,7 @@ class Routeplanner_basic:
                                 new_task_dict[agv + 1] = agv_task_list[agv + 1]  # todo: check this out
                         else:  # 分配一个在线任务
                             if len(outer_dict[self.car2set[agv + 1]]) >= 1:  # 剩余一个库位
-                                assign_task = online_tasks.pop()  # 待分配的任务id
+                                assign_task = online_tasks.pop(0)  # 待分配的任务id
                                 end = (outer_dict[self.car2set[agv + 1]][0])
                                 task_dict[assign_task].end = end
                                 task_get = self.get_route(start=self.park_list[agv],
@@ -286,7 +292,7 @@ class Routeplanner_basic:
                     assert agv_status_list[agv] in ('get', 'put')
                     if len(online_tasks) >= 1 and len(outer_dict[self.car2set[agv + 1]]) >= 1:  # 指派一个任务
                         exec_task = agv_task_list[agv][0]
-                        assign_task = online_tasks.pop()  # 待分配的任务id
+                        assign_task = online_tasks.pop(0)  # 待分配的任务id
                         end = (outer_dict[self.car2set[agv + 1]][0])
                         task_dict[assign_task].end = end
                         task_get = self.get_route(start=task_dict[exec_task].end,
@@ -305,8 +311,8 @@ class Routeplanner_basic:
                     if agv_status_list[agv] == 'return':  # [-agv, 1, -agv]
                         # 指派两个任务，取3保证一定宽放量，避免有车空闲却无任务可接
                         if len(online_tasks) >= 3 and len(outer_dict[self.car2set[agv + 1]]) >= 2:
-                            assign_task_1 = online_tasks.pop()  # 1st待分配的任务id
-                            assign_task_2 = online_tasks.pop()  # 2nd待分配的任务id
+                            assign_task_1 = online_tasks.pop(0)  # 1st待分配的任务id
+                            assign_task_2 = online_tasks.pop(0)  # 2nd待分配的任务id
                             end_1, end_2 = (outer_dict[self.car2set[agv + 1]][i] for i in range(2))
                             task_dict[assign_task_1].end, task_dict[assign_task_2].end = end_1, end_2
                             task_1_get = self.get_route(start=self.park_list[agv],
@@ -326,7 +332,7 @@ class Routeplanner_basic:
                             task_dict[assign_task_2].route_seq = list(task_2_get) + list(task_2_put[1:])
                             task_dict[-int(agv+1)].route_seq = list(task_return)
                         elif len(online_tasks) >= 1 and len(outer_dict[self.car2set[agv + 1]]) >= 1:  # 指派一个任务
-                            assign_task = online_tasks.pop()  # 待分配的任务id
+                            assign_task = online_tasks.pop(0)  # 待分配的任务id
                             end = (outer_dict[self.car2set[agv + 1]][0])
                             task_dict[assign_task].end = end
                             task_get = self.get_route(start=self.park_list[agv],
@@ -346,7 +352,7 @@ class Routeplanner_basic:
                         exec_task = agv_task_list[agv][0]
                         # 只能指派一个任务
                         if len(online_tasks) >= 1 and len(outer_dict[self.car2set[agv + 1]]) >= 1:  # 指派一个任务
-                            assign_task = online_tasks.pop()  # 待分配的任务id
+                            assign_task = online_tasks.pop(0)  # 待分配的任务id
                             end = (outer_dict[self.car2set[agv + 1]][0])
                             task_dict[assign_task].end = end
                             task_get = self.get_route(start=task_dict[exec_task].end,
@@ -368,8 +374,8 @@ class Routeplanner_basic:
                         f'{agv_status_list[agv], agv_task_list[agv][0]}'
                     # 指派两个任务，取3保证一定宽放量，避免有车空闲却无任务可接
                     if len(online_tasks) >= 3 and len(outer_dict[self.car2set[agv + 1]]) >= 2:
-                        assign_task_1 = online_tasks.pop()  # 1st待分配的任务id
-                        assign_task_2 = online_tasks.pop()  # 2nd待分配的任务id
+                        assign_task_1 = online_tasks.pop(0)  # 1st待分配的任务id
+                        assign_task_2 = online_tasks.pop(0)  # 2nd待分配的任务id
                         end_1, end_2 = (outer_dict[self.car2set[agv + 1]][i] for i in range(2))
                         task_dict[assign_task_1].end, task_dict[assign_task_2].end = end_1, end_2
                         task_1_get = self.get_route(start=self.park_list[agv],
@@ -389,7 +395,7 @@ class Routeplanner_basic:
                         task_dict[assign_task_2].route_seq = list(task_2_get) + list(task_2_put[1:])
                         task_dict[-int(agv+1)].route_seq = list(task_return)
                     elif len(online_tasks) >= 1 and len(outer_dict[self.car2set[agv + 1]]) >= 1:  # 指派一个任务
-                        assign_task = online_tasks.pop()  # 待分配的任务id
+                        assign_task = online_tasks.pop(0)  # 待分配的任务id
                         end = (outer_dict[self.car2set[agv + 1]][0])
                         task_dict[assign_task].end = end
                         task_get = self.get_route(start=self.park_list[agv],
@@ -414,8 +420,8 @@ class Routeplanner_basic:
                             agv] == 'return', f'agv{agv}, task_list_len = 1'
                     if agv2offlinetask[agv + 1]:  # 后续有任务
                         if len(agv2offlinetask[agv + 1]) >= 2:  # 分配两个任务
-                            assign_task_1 = agv2offlinetask[agv + 1].pop()  # 1st待分配的任务id
-                            assign_task_2 = agv2offlinetask[agv + 1].pop()  # 2nd待分配的任务id
+                            assign_task_1 = agv2offlinetask[agv + 1].pop(0)  # 1st待分配的任务id
+                            assign_task_2 = agv2offlinetask[agv + 1].pop(0)  # 2nd待分配的任务id
                             task_1_get = self.get_route(start=self.park_list[agv],
                                                         end=task_dict[assign_task_1].start)
                             task_1_put = self.get_route(start=task_dict[assign_task_1].start,
@@ -437,7 +443,7 @@ class Routeplanner_basic:
                             task_dict[assign_task_2].route_seq = list(task_2_get) + list(task_2_put[1:])
                             task_dict[-int(agv+1)].route_seq = list(task_return)
                         elif len(agv2offlinetask[agv + 1]) >= 1:  # 分配一个任务
-                            assign_task = agv2offlinetask[agv + 1].pop()  # 待分配的任务id
+                            assign_task = agv2offlinetask[agv + 1].pop(0)  # 待分配的任务id
                             task_get = self.get_route(start=self.park_list[agv],
                                                       end=task_dict[assign_task].start)
                             task_put = self.get_route(start=task_dict[assign_task].start,
@@ -457,7 +463,7 @@ class Routeplanner_basic:
                     assert agv_status_list[agv] in ('get', 'put')
                     if len(agv2offlinetask[agv + 1]) >= 1:  # 指派一个任务
                         exec_task = agv_task_list[agv][0]
-                        assign_task = agv2offlinetask[agv + 1].pop()  # 待分配的任务id
+                        assign_task = agv2offlinetask[agv + 1].pop(0)  # 待分配的任务id
                         task_get = self.get_route(start=task_dict[exec_task].end,
                                                   end=task_dict[assign_task].start)
                         task_put = self.get_route(start=task_dict[assign_task].start,
@@ -474,8 +480,8 @@ class Routeplanner_basic:
                     if agv_status_list[agv] == 'return':  # [-agv, 1, -agv]
                         # 指派两个任务，取3保证一定宽放量，避免有车空闲却无任务可接
                         if len(agv2offlinetask[agv + 1]) >= 2:
-                            assign_task_1 = agv2offlinetask[agv + 1].pop()  # 1st待分配的任务id
-                            assign_task_2 = agv2offlinetask[agv + 1].pop()  # 2nd待分配的任务id
+                            assign_task_1 = agv2offlinetask[agv + 1].pop(0)  # 1st待分配的任务id
+                            assign_task_2 = agv2offlinetask[agv + 1].pop(0)  # 2nd待分配的任务id
                             task_1_get = self.get_route(start=self.park_list[agv],
                                                         end=task_dict[assign_task_1].start)
                             task_1_put = self.get_route(start=task_dict[assign_task_1].start,
@@ -493,7 +499,7 @@ class Routeplanner_basic:
                             task_dict[assign_task_2].route_seq = list(task_2_get) + list(task_2_put[1:])
                             task_dict[-int(agv+1)].route_seq = list(task_return)
                         elif len(agv2offlinetask[agv + 1]) >= 1:  # 指派一个任务
-                            assign_task = agv2offlinetask[agv + 1].pop()  # 待分配的任务id
+                            assign_task = agv2offlinetask[agv + 1].pop(0)  # 待分配的任务id
                             task_get = self.get_route(start=self.park_list[agv],
                                                       end=task_dict[assign_task].start)
                             task_put = self.get_route(start=task_dict[assign_task].start,
@@ -511,7 +517,7 @@ class Routeplanner_basic:
                         exec_task = agv_task_list[agv][0]
                         # 只能指派一个任务
                         if len(agv2offlinetask[agv + 1]) >= 1:  # 指派一个任务
-                            assign_task = agv2offlinetask[agv + 1].pop()  # 待分配的任务id
+                            assign_task = agv2offlinetask[agv + 1].pop(0)  # 待分配的任务id
                             task_get = self.get_route(start=task_dict[exec_task].end,
                                                       end=task_dict[assign_task].start)
                             task_put = self.get_route(start=task_dict[assign_task].start,
@@ -530,8 +536,8 @@ class Routeplanner_basic:
                         f'{agv_status_list[agv], agv_task_list[agv][0]}'
                     # 指派两个任务，取3保证一定宽放量，避免有车空闲却无任务可接
                     if len(agv2offlinetask[agv + 1]) >= 2:
-                        assign_task_1 = agv2offlinetask[agv + 1].pop()  # 1st待分配的任务id
-                        assign_task_2 = agv2offlinetask[agv + 1].pop()  # 2nd待分配的任务id
+                        assign_task_1 = agv2offlinetask[agv + 1].pop(0)  # 1st待分配的任务id
+                        assign_task_2 = agv2offlinetask[agv + 1].pop(0)  # 2nd待分配的任务id
                         task_1_get = self.get_route(start=self.park_list[agv],
                                                     end=task_dict[assign_task_1].start)
                         task_1_put = self.get_route(start=task_dict[assign_task_1].start,
@@ -549,7 +555,7 @@ class Routeplanner_basic:
                         task_dict[assign_task_2].route_seq = list(task_2_get) + list(task_2_put[1:])
                         task_dict[-int(agv+1)].route_seq = list(task_return)
                     elif len(agv2offlinetask[agv + 1]) >= 1:  # 指派一个任务
-                        assign_task = agv2offlinetask[agv + 1].pop()  # 待分配的任务id
+                        assign_task = agv2offlinetask[agv + 1].pop(0)  # 待分配的任务id
                         task_get = self.get_route(start=self.park_list[agv],
                                                   end=task_dict[assign_task].start)
                         task_put = self.get_route(start=task_dict[assign_task].start,

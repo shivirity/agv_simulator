@@ -12,15 +12,15 @@ log_colors_config = {
     'ERROR': 'red',
     'CRITICAL': 'bold_red',
 }
-logger_pre = logging.getLogger("logger_pre")
-logger_pre.setLevel(logging.DEBUG)
+logger = logging.getLogger("logger_pre")
+logger.setLevel(logging.DEBUG)
 sh = logging.StreamHandler()
 sh.setLevel(logging.INFO)
 stream_fmt = colorlog.ColoredFormatter(
     fmt="%(log_color)s[%(asctime)s] - %(filename)-8s - %(levelname)-7s - line %(lineno)s - %(message)s",
     log_colors=log_colors_config)
 sh.setFormatter(stream_fmt)
-logger_pre.addHandler(sh)
+logger.addHandler(sh)
 sh.close()
 
 random.seed(42)
@@ -224,7 +224,7 @@ class Problem:
         if have_circle:
             for i in range(len(have_circle)):
                 self.deadlock_times += 1
-                logger_pre.error(f'deadlock occurs between {have_circle}')
+                logger.error(f'deadlock occurs between {have_circle}')
                 list_deadlock = [x.index(node) for node in have_circle[i]]
                 self.deadlock[self.deadlock_times] = list_deadlock
 
@@ -233,14 +233,14 @@ class Problem:
         # Type 1: low battery
         for i in range(len(self.AGV)):
             if random.random() < self.alpha and self.move_status[i] == 0:
-                logger_pre.info(f'error occurred for agv{i+1} because of low battery.')
+                logger.info(f'error occurred for agv{i+1} because of low battery.')
                 self.move_status[i] += 1
                 self.AGV[i+1].status = 'stop_low_battery'
 
         # Type 2: blocked or broken
         for i in range(len(self.AGV)):
             if random.random() < self.beta:
-                logger_pre.warning(f'error occurred for agv{i+1} because of blocked or broken.')
+                logger.warning(f'error occurred for agv{i+1} because of blocked or broken.')
                 self.move_status[i] += 10
                 self.AGV[i+1].status = 'down'
 
@@ -256,6 +256,7 @@ class Problem:
                 if len(self.AGV[i+1].route) >= 3:
                     self.AGV[i+1].next_loc = self.AGV[i+1].route[2]
                 else:  # 应该进不了这个判断
+                    assert False
                     self.AGV[i+1].next_loc = self.AGV[i+1].location
             elif instruction[i] is False and self.move_status[i] == 0:  # instruction[i] and self.move_status != 0:
                 if self.AGV[i+1].route:  # route为空则说明还没接到任务，控制器能判断出来
@@ -388,7 +389,7 @@ class Problem:
                 # self.AGV[i+1].status = 'idle'
             if self.AGV[i+1].next_loc == self.AGV[i+1].park_loc and len(self.AGV[i+1].tasklist) == 1:
                 if len(self.AGV[i+1].tasklist) == 1:
-                    self.AGV[i+1].tasklist = None
+                    self.AGV[i+1].tasklist = []
                     self.AGV[i+1].task = None
                     self.AGV[i+1].task_status = None
             if self.AGV[i+1].location == self.AGV[i+1].park_loc and self.AGV[i+1].tasklist is None:
@@ -435,6 +436,7 @@ class Problem:
             self.AGV[i].tasklist = list(task_dict[i])
             if self.AGV[i].tasklist:  # 判断列表不为空
                 if self.AGV[i].task is None:  # 包括初始化  # 或self.AGV[i].task_status == None
+                    assert len(self.AGV[i].route) == 0, f'agv{i}'
                     self.AGV[i].task = self.AGV[i].tasklist[0]
                     self.AGV[i].task_status = 'get'
                     self.Map[self.Task[self.AGV[i].task].start].reservation = True
@@ -443,14 +445,19 @@ class Problem:
                         if j == self.AGV[i].task:
                             self.AGV[i].route += self.Task[j].route_seq
                         else:
-                            tmp = self.Task[j].route_seq
+                            tmp = list(self.Task[j].route_seq)
                             tmp.pop(0)
                             self.AGV[i].route += tmp
                 else:
-                    temp = self.AGV[i].tasklist
-                    temp.pop(0)
+                    temp = list(self.AGV[i].tasklist)
+                    cur_task = temp.pop(0)
+                    # assert self.Task[cur_task].end in self.AGV[i].route
+                    if self.Task[cur_task].end not in self.AGV[i].route:
+                        logger.debug('here')
+                    cur_end_idx = self.AGV[i].route.index(self.Task[cur_task].end)
+                    self.AGV[i].route = self.AGV[i].route[:cur_end_idx+1]  # delete undo task
                     for j in temp:
-                        tmp = self.Task[j].route_seq
+                        tmp = list(self.Task[j].route_seq)
                         tmp.pop(0)
                         self.AGV[i].route += tmp
                 if self.AGV[i].task > 0:
@@ -539,16 +546,3 @@ class Problem:
         self.update_step()
         self.finish_identify()
 
-    def route_scheduling(self):
-        task_dict = {i: [i, i+1] for i in range(1, 9)}
-        route_seq = {
-            1: [364, 363, 321, 348, 347, 338, 337, 336],
-            2: [362, 361, 319, 346, 345, 336, 334, 334],
-            3: [360, 359, 358, 357, 317, 344, 343, 334],
-            4: [354, 353, 309, 340, 339, 326, 325, 324],
-            5: [66, 65, 64, 63, 62, 68],
-            6: [57, 56, 55, 54, 53, 52],
-            7: [135, 134, 133, 132, 136, 137, 141, 142],
-            8: [140, 139, 138, 137, 141, 142, 143, 144],
-        }
-        return task_dict
