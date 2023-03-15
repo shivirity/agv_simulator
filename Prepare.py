@@ -533,12 +533,12 @@ class Problem:
 
         if not self.time:
             self.instruction = self.controller.get_instruction(
-                status_list=[True for _ in range(8)],
+                status_list=[True if i < 0.1 else False for i in self.move_status],
                 loc_list=[self.AGV[i].location for i in range(1, 9)],
             )
         else:
             self.instruction = self.controller.get_instruction(
-                status_list=[True for _ in range(8)],
+                status_list=[True if i < 0.1 else False for i in self.move_status],
                 loc_list=[self.AGV[i].location for i in range(1, 9)],
                 step_list=self.moving_success
             )

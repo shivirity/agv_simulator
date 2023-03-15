@@ -67,7 +67,7 @@ if __name__ == '__main__':
         # 系统动态更新
         problem.run_step()
         logger.info(f'time={problem.time}')
-        if problem.time == 300:
+        if problem.time == 3000:
             logger.debug('here')
         logger.info(f'current_agv_location={problem.get_agv_location()}')
         logger.info(f'current_agv_location = {problem.get_agv_location()}')
