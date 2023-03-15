@@ -240,14 +240,14 @@ class Problem:
         # Type 1: low battery
         for i in range(len(self.AGV)):
             if random.random() < self.alpha and self.move_status[i] == 0:
-                logger.info(f'error occurred for agv{i+1} because of low battery.')
+                logger.error(f'error occurred for agv{i+1} because of low battery.')
                 self.move_status[i] += 1
                 self.AGV[i+1].status = 'stop_low_battery'
 
         # Type 2: blocked or broken
         for i in range(len(self.AGV)):
             if random.random() < self.beta:
-                logger.warning(f'error occurred for agv{i+1} because of blocked or broken.')
+                logger.error(f'error occurred for agv{i+1} because of blocked or broken.')
                 self.move_status[i] += 10
                 self.AGV[i+1].status = 'down'
 
@@ -542,6 +542,13 @@ class Problem:
                 loc_list=[self.AGV[i].location for i in range(1, 9)],
                 step_list=self.moving_success
             )
+
+        for agv in range(8):
+            if len(self.AGV[agv+1].route) >= 3:
+                if self.AGV[agv+1].route[2] != self.controller.residual_routes[agv][0]:
+                    logger.debug('here')
+                assert self.AGV[agv+1].route[2] == self.controller.residual_routes[agv][0]
+
         # 下发控制路径 step_list 上一步到底有没有走成功，转弯不算走，移动
 
         self.error_generating()  # 误差生成
@@ -552,4 +559,5 @@ class Problem:
         self.agvs_status_change()
         self.update_step()
         self.finish_identify()
+
 

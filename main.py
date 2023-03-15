@@ -67,7 +67,7 @@ if __name__ == '__main__':
         # 系统动态更新
         problem.run_step()
         logger.info(f'time={problem.time}')
-        if problem.time == 932:
+        if problem.time == 300:
             logger.debug('here')
         logger.info(f'current_agv_location={problem.get_agv_location()}')
         logger.info(f'current_agv_location = {problem.get_agv_location()}')
@@ -75,5 +75,8 @@ if __name__ == '__main__':
         logger.warning(f'loc={problem.AGV[4].location}')
         logger.warning(f'next_loc={problem.AGV[4].next_loc}')
         logger.warning(f'tasklist={problem.AGV[4].tasklist}')
-        logger.warning(f'end={problem.Task[102].end}')
-        logger.warning(f'state={problem.Task[102].state}')
+        logger.warning(f'cur_ins={problem.instruction}')
+        logger.warning(f'step_success={problem.moving_success}')
+        logger.warning(f'1_next_loc={problem.controller.residual_routes[1][:3]}')
+        if True not in problem.instruction:
+            logger.debug('here')

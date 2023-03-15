@@ -43,6 +43,7 @@ class RouteController:
         self.reservation = None  # PR哈希, -1 -> 未预定, >=0 -> 被对应编号预定
         self.hash_route = [0 for _ in range(self.num_of_nodes+1)]  # list
         self.update_shared_flag = [True for _ in range(self.num_of_agv)]
+        self.update_route_free = False
 
         # 计算相关
         # self.total_shared_routes = self._init_total_shared_routes()  # dict
@@ -145,13 +146,14 @@ class RouteController:
         for grid in self.shared_routes[agv]:
             if self.reservation[grid] == agv:
                 assert len([i for i in range(len(self.reservation)) if self.reservation[i] == agv]) == 1
+                continue
             if self.reservation[grid] >= 0:
                 return True
         else:
             return False
 
     def update_routes(self, routes: dict):
-        routes = dict(routes)
+        routes = copy.deepcopy(routes)
         """利用 new_routes 更新各车辆 residual route"""
         assert isinstance(routes, dict)
         self.update_shared_flag = [True for _ in range(self.num_of_agv)]  # update允许更新列表
@@ -162,6 +164,7 @@ class RouteController:
             logger.info(f'AGV{key} route updated.')
         # 更新 hash_route 和 residual_route
         self._init_shared_routes()
+        self.update_route_free = True
 
     def get_instruction(self, status_list: list, loc_list: list, step_list: list = None) -> list:
         """
@@ -179,7 +182,7 @@ class RouteController:
             assert loc is not None, f'{loc}'
         self._update_reservation(loc_list=loc_list)
 
-        if step_list is not None:
+        if step_list is not None and not self.update_route_free:
             # update residual_routes & hash_route
             step_grid_list = []  # 记录各车上一步路过节点，未前进则为-1
             for agv in range(self.num_of_agv):
@@ -235,6 +238,7 @@ class RouteController:
                     flag = self._update_shared_routes(agv=agv)
                     if not flag:
                         self.update_shared_flag[agv] = flag
+        self.update_route_free = False
 
         control_list = []  # 控制指令列表
         # 对比潜在路径，更新权限申请情况
