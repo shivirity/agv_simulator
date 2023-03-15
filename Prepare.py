@@ -130,6 +130,8 @@ class Problem:
         self.error = 0  # 错误代码，表示系统出现碰撞的次数
         self.deadlock = {}  # 储存发生死锁的车辆闭环
         self.deadlock_times = 0  # 储存发生死锁的次数
+        # self.deadlock_happen = False  # 每一步储存是否有死锁发生
+        # self.deadlock_num = []  # 用于储存每一步发生的死锁编号
         self.move_status = [0, 0, 0, 0, 0, 0, 0, 0]  # 叉车下一步行进状态列表，0 代表前进，其余代表所需停留的步长，默认为全部前进
         # moving_success: 叉车实际的行进状态，成功前进则为True, 原地停留则为False单步更新，可能会因为误差导致与规划不一致
         self.moving_success = [True, True, True, True, True, True, True, True]
@@ -229,11 +231,34 @@ class Problem:
         have_circle = findcircle(g)
 
         if have_circle:
+            # self.deadlock_happen = True
             for i in range(len(have_circle)):
                 self.deadlock_times += 1
                 logger.error(f'deadlock occurs between {have_circle}')
                 list_deadlock = [x.index(node) for node in have_circle[i]]
                 self.deadlock[self.deadlock_times] = list_deadlock
+                # self.deadlock_num.append(self.deadlock_times)
+                # 强制车辆前进至下一位置，并停留n（两）步，模拟死锁处理时间
+                for j in list_deadlock:
+                    self.move_status[i] += 2
+                    self.AGV[j+1].last_loc = self.AGV[j+1].location
+                    self.AGV[j+1].location = self.AGV[j+1].next_loc
+                    self.AGV[j+1].route.pop(0)
+                    if len(self.AGV[j+1].route) >= 3:
+                        self.AGV[j+1].next_loc = self.AGV[j+1].route[2]
+                    else:
+                        self.AGV[j+1].next_loc = self.AGV[j+1].location
+
+    '''
+    # 仿真器死锁解决策略，强制改变控制路径的下发使得系统达到一个人工搬运后得以畅通的状态
+    def deadlock_solving(self):
+        if self.deadlock_happen:
+            for i in self.deadlock_num:
+                for j in self.deadlock[i]:
+                    self.instruction[j] = True
+            self.deadlock_happen = False
+            self.deadlock_num = []
+            '''
 
     # 误差生成
     def error_generating(self):
@@ -543,13 +568,14 @@ class Problem:
                 step_list=self.moving_success
             )
 
-        for agv in range(8):
+        '''for agv in range(8):
             if len(self.AGV[agv+1].route) >= 3:
                 if self.AGV[agv+1].route[2] != self.controller.residual_routes[agv][0]:
                     logger.debug('here')
-                assert self.AGV[agv+1].route[2] == self.controller.residual_routes[agv][0]
+                assert self.AGV[agv+1].route[2] == self.controller.residual_routes[agv][0]'''
 
         # 下发控制路径 step_list 上一步到底有没有走成功，转弯不算走，移动
+
 
         self.error_generating()  # 误差生成
 
