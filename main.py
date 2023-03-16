@@ -1,3 +1,4 @@
+import time
 import logging
 import colorlog
 
@@ -27,6 +28,8 @@ sh.setFormatter(stream_fmt)
 logger.addHandler(sh)
 sh.close()
 
+log_print_freq = 3000  # (set None to avoid printing log)
+
 if __name__ == '__main__':
 
     # 数据读入
@@ -36,6 +39,8 @@ if __name__ == '__main__':
 
     first_in = True
     route_planner = Routeplanner_basic(grids=problem.Map)
+
+    start = time.time()
 
     while not problem.is_finished:
 
@@ -66,17 +71,16 @@ if __name__ == '__main__':
 
         # 系统动态更新
         problem.run_step()
-        logger.info(f'time={problem.time}')
-        if problem.time == 3000:
-            logger.debug('here')
-        logger.info(f'current_agv_location={problem.get_agv_location()}')
-        logger.info(f'current_agv_location = {problem.get_agv_location()}')
-        logger.info(f'current_agv_status = {problem.get_agv_status()}')
-        logger.warning(f'loc={problem.AGV[4].location}')
-        logger.warning(f'next_loc={problem.AGV[4].next_loc}')
-        logger.warning(f'tasklist={problem.AGV[4].tasklist}')
-        logger.warning(f'cur_ins={problem.instruction}')
-        logger.warning(f'step_success={problem.moving_success}')
-        logger.warning(f'1_next_loc={problem.controller.residual_routes[1][:3]}')
-        if True not in problem.instruction:
-            logger.debug('here')
+        if problem.time % int(log_print_freq) == 0 and log_print_freq is not None:
+            logger.info(f'time={problem.time}, cur_agv_loc={problem.get_agv_location()}')
+
+    else:
+        end = time.time()
+        logger.info('time span = {:.2f}s'.format(end-start))
+        logger.info(f'operation time = {problem.time}s')
+        logger.info(
+            f'task end time = '
+            f'{[(problem.AGV[i].end_state[0] if problem.AGV[i].end_state[0] > 0 else problem.time) for i in range(1, 9)]} in seconds')
+        logger.info(f'deadlock times = {problem.deadlock_times}')
+        logger.info(f'loc collision times = {problem.loc_error}')
+        logger.info(f'side collision times = {problem.side_error}')

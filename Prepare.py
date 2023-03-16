@@ -24,7 +24,6 @@ logger.addHandler(sh)
 sh.close()
 
 random.seed(42)
-# todo task不存在时不再记为-1 记为None
 
 
 def sp_uniform(t, size):
@@ -94,6 +93,7 @@ class AGV:
         self.park_loc = park_grid
         self.task_status = None  # 'get', 'put', 'return', None
         self.is_load = 0  # 0表示车上空载，1表示车上有货
+        self.end_state = (0, False)  # 车辆任务结束状态，第一项表示结束时间，第二项表示车辆是否已完成所有任务
 
     def get_location(self):  # 考虑可以放在Problem类，依据AGV编号来获取实时位置
         return self.location
@@ -127,7 +127,8 @@ class Problem:
         self.AGV = dict_agv  # 储存各AGV的实时位置信息
         self.Task_order = dict_task_order  # 储存车辆在线任务终点的候选节点列表
         # self.Route = []  # 储存正在执行的任务路径 似乎不太需要
-        self.error = 0  # 错误代码，表示系统出现碰撞的次数
+        self.loc_error = 0  # 系统出现位置重合碰撞的次数
+        self.side_error = 0  # 系统出现位置库位边缘碰撞的次数
         self.deadlock = {}  # 储存发生死锁的车辆闭环
         self.deadlock_times = 0  # 储存发生死锁的次数
         # self.deadlock_happen = False  # 每一步储存是否有死锁发生
@@ -140,9 +141,10 @@ class Problem:
         self.time = 0  # 系统全局时间步
         self.is_finished = False  # 判定仿真过程是否完成
         self.online_task_arrival = False  # 判断是否有任务到达
-        self.tmp = []  # 用于暂存车辆下一步的位置
+        self.next_locs = []  # 用于暂存车辆下一步的位置
         # self.not_assigned_task_buffer = []  # 用于储存待规划的任务编号，调用函数才会更新
         # self.not_performed_task_buffer = []  # 用于储存待执行的离线任务编号，调用函数才会更新
+        self.deadlock_happen = False
 
         # route_controller
         self.controller = None
@@ -175,37 +177,37 @@ class Problem:
 
     # 碰撞判断
     def collision_check(self):
-        agvs_set = set()
-        agvs_list = []
-        for i in range(len(self.AGV)):
-            if self.move_status[i] == 0 and self.AGV[i+1].last_loc is not None:
-                agvs_set.add(self.AGV[i+1].next_loc)
-                agvs_list.append(self.AGV[i+1].next_loc)
-            else:
-                agvs_set.add(self.AGV[i+1].location)
-                agvs_list.append(self.AGV[i+1].location)
-
+        self.next_locs = None
+        agvs_list = [self.AGV[i+1].next_loc if self.instruction[i] is True and self.move_status[i] == 0
+                     else self.AGV[i+1].location
+                     for i in range(len(self.AGV))]
+        agvs_set = set(agvs_list)
+        # location collision
         if len(agvs_set) < len(self.AGV):
-            # print("AGV碰撞")  ### 后续可以优化一下碰撞的AGV序号
-            self.error += 1
-            self.tmp = agvs_list
-        for i in agvs_list:
-            for j in agvs_list:
-                if j in self.Map[i].conflict:
-                    self.error += 1
-                    self.tmp = agvs_list
+            self.loc_error += len(self.AGV) - len(agvs_set)
+            self.next_locs = list(agvs_list)
+        # near collision
+        for i in range(len(self.AGV)-1):
+            for j in range(i+1, len(self.AGV)):
+                if agvs_list[j] in self.Map[agvs_list[i]].conflict:
+                    self.side_error += 1
+                    self.next_locs = list(agvs_list)
+        return
 
     # 碰撞更新
     def update_control_policy(self):
         """如果冲突，让冲突的车辆停一轮，状态改为stop"""
-        if not self.error:
-            set_tmp = set(self.tmp)
-            for loc in set_tmp:
-                index = [x for (x, y) in enumerate(self.tmp) if y == loc]  # todo 用哈希表试一下
-                if len(index) > 1:
-                    for i in range(len(index)):
-                        if self.move_status[i] == 0:
-                            self.move_status[i] += 1
+        next_locs_set = set(self.next_locs)
+        loc_hash = {key: [] for key in next_locs_set}
+        for loc_idx in range(len(self.next_locs)):
+            loc_hash[self.next_locs[loc_idx]].append(loc_idx)
+        col_pairs = [i for i in loc_hash.values() if len(i) > 1]
+        for pair in col_pairs:
+            assert isinstance(pair, list)
+        col_agvs = set([i for j in col_pairs for i in j])
+        for agv in col_agvs:
+            if self.move_status[agv] == 0:
+                self.move_status[agv] += 1
 
     # 死锁判断
     def deadlock_check(self):
@@ -231,8 +233,18 @@ class Problem:
         have_circle = findcircle(g)
 
         if have_circle:
-            # self.deadlock_happen = True
+            for circle in have_circle:
+                if len(circle) > 1:
+                    break
+            else:
+                # 只有一辆车进入死锁，即该车cur_loc == next_loc
+                return
+
+        if have_circle:
+            self.deadlock_happen = True
             for i in range(len(have_circle)):
+                if len(have_circle[i]) == 1:
+                    continue
                 self.deadlock_times += 1
                 logger.error(f'deadlock occurs between {have_circle}')
                 list_deadlock = [x.index(node) for node in have_circle[i]]
@@ -264,15 +276,15 @@ class Problem:
     def error_generating(self):
         # Type 1: low battery
         for i in range(len(self.AGV)):
-            if random.random() < self.alpha and self.move_status[i] == 0:
-                logger.error(f'error occurred for agv{i+1} because of low battery.')
+            if random.random() < self.alpha and self.move_status[i] == 0 and self.AGV[i+1].status == 'busy':
+                logger.warning(f'[LOW BATTERY]: agv{i+1} at time {self.time}.')
                 self.move_status[i] += 1
                 self.AGV[i+1].status = 'stop_low_battery'
 
         # Type 2: blocked or broken
         for i in range(len(self.AGV)):
-            if random.random() < self.beta:
-                logger.error(f'error occurred for agv{i+1} because of blocked or broken.')
+            if random.random() < self.beta and self.AGV[i+1].status == 'busy':
+                logger.warning(f'[BLOCKED or BROKEN]: agv{i+1} at time {self.time}.')
                 self.move_status[i] += 10
                 self.AGV[i+1].status = 'down'
 
@@ -287,10 +299,12 @@ class Problem:
                 self.AGV[i+1].route.pop(0)
                 if len(self.AGV[i+1].route) >= 3:
                     self.AGV[i+1].next_loc = self.AGV[i+1].route[2]
-                else:  # 应该进不了这个判断
-                    assert False
-                    self.AGV[i+1].next_loc = self.AGV[i+1].location
-            elif instruction[i] is False and self.move_status[i] == 0:  # instruction[i] and self.move_status != 0:
+                else:  # 进入停靠点
+                    assert self.AGV[i+1].location == self.AGV[i+1].park_loc
+                    assert len(self.AGV[i+1].route) == 2
+                    assert not self.AGV[i+1].tasklist
+
+            elif not instruction[i] and self.move_status[i] == 0:  # instruction[i] and self.move_status != 0:
                 if self.AGV[i+1].route:  # route为空则说明还没接到任务，控制器能判断出来
                     self.AGV[i+1].status = 'waiting'  # 该前进但需要等待
                 self.moving_success[i] = False
@@ -302,18 +316,25 @@ class Problem:
     def agvs_status_change(self):
         """控制车辆状态变更（走，停，转弯，...）"""
         for i in range(len(self.AGV)):
+            # 取货结束
             if self.AGV[i+1].status == 'get_arriving' and self.move_status[i] == 0:
+                assert self.AGV[i + 1].location == self.Task[self.AGV[i + 1].task].start
                 self.AGV[i+1].task_status = 'put'
                 # self.AGV[i+1].is_load = 1
                 if self.Map[self.Task[self.AGV[i+1].task].start].state is not None:
                     self.Map[self.Task[self.AGV[i+1].task].start].state -= 1
-            if self.move_status[i] == 0 and self.AGV[i+1].status != 'busy' and self.AGV[i+1].status != 'idle' \
-                    and self.AGV[i+1].status != 'put_arriving' and self.AGV[i+1].status != 'turning':
+            # 中途改变
+            if self.move_status[i] == 0 and self.AGV[i+1].status not in ('busy', 'idle', 'put_arriving', 'turning'):
                 if self.AGV[i+1].next_loc != self.AGV[i+1].location:
-                    self.AGV[i+1].status = 'busy'
+                    if self.AGV[i+1].task < 0:  # on return
+                        self.AGV[i + 1].status = 'idle'
+                    else:
+                        self.AGV[i + 1].status = 'busy'
                 else:
                     self.AGV[i+1].status = 'idle'
+            # 卸货结束
             if self.AGV[i+1].status == 'put_arriving' and self.move_status[i] == 0:
+                assert self.AGV[i+1].location == self.Task[self.AGV[i+1].task].end
                 # self.AGV[i+1].is_load = 0
                 self.Map[self.Task[self.AGV[i+1].task].end].state += 1
                 self.Task[self.AGV[i+1].task].state = 3  # 代表当前任务完成
@@ -327,7 +348,7 @@ class Problem:
                     self.Map[self.Task[self.AGV[i+1].task].start].reservation = True
                     self.Map[self.Task[self.AGV[i+1].task].end].reservation = True
                     self.Task[self.AGV[i+1].task].state = 2
-                    # 在线任务开始执行后将终点序列更新  # todo 待测试
+                    # 在线任务开始执行后将终点序列更新
                     if i <= 3 and self.Task[self.AGV[i+1].task].end == self.Task_order[i+1][0]:
                         self.Task_order[i+1].pop(0)
                     self.AGV[i+1].task_status = 'get'
@@ -403,13 +424,15 @@ class Problem:
         for i in range(len(self.AGV)):
             if self.AGV[i+1].task:
                 task_now = self.Task[self.AGV[i+1].task]
+                # 开始取货
                 if self.AGV[i+1].location == task_now.start and self.AGV[i+1].is_load == 0 and \
                         self.AGV[i+1].status != 'get_arriving':
                     self.AGV[i+1].status = 'get_arriving'
                     self.AGV[i+1].is_load = 1  # 用于到达后的起步判断了
                     self.Map[self.Task[self.AGV[i+1].task].start].reservation = False
                     self.move_status[i] += self.cargo_time  # 等待时间加上一个取、卸货的时间
-                if self.AGV[i+1].location == task_now.end and self.AGV[i+1].is_load == 1 and \
+                # 开始卸货
+                elif self.AGV[i+1].location == task_now.end and self.AGV[i+1].is_load == 1 and \
                         self.AGV[i+1].status != 'put_arriving':
                     self.AGV[i+1].is_load = 0  # 用于到达后的起步判断了
                     self.AGV[i+1].status = 'put_arriving'
@@ -417,26 +440,25 @@ class Problem:
                     # 完成当前任务, 将当前任务从列表中pop出，但task属性还是需要判断是否在执行return任务
                     # self.AGV[i+1].tasklist.pop(0)
                     self.move_status[i] += self.cargo_time  # 等待时间加上一个取、卸货的时间
-            # if self.AGV[i+1].location == self.AGV[i+1].park_loc and self.AGV[i+1].status != 'idle':
-                # self.AGV[i+1].status = 'idle'
-            if self.AGV[i+1].next_loc == self.AGV[i+1].park_loc and len(self.AGV[i+1].tasklist) == 1:
-                if len(self.AGV[i+1].tasklist) == 1:
-                    self.AGV[i+1].tasklist = []
-                    self.AGV[i+1].task = None
-                    self.AGV[i+1].task_status = None
-            if self.AGV[i+1].location == self.AGV[i+1].park_loc and self.AGV[i+1].tasklist is None:
-                #  叉车在停靠点停留
-                self.move_status[i] += 1
-                # todo 此处无法计算叉车在停靠点等待多久
-            elif self.AGV[i+1].location == self.AGV[i+1].park_loc and len(self.AGV[i+1].tasklist) > 1:
+                # 车辆到达
+                elif self.AGV[i+1].next_loc == self.AGV[i+1].park_loc and len(self.AGV[i+1].tasklist) == 1:
+                    self.AGV[i + 1].tasklist = []
+                    self.AGV[i + 1].task = None
+                    self.AGV[i + 1].task_status = None
+            else:
+                # 车辆任务结束
+                if self.time > 10584 and self.AGV[i + 1].end_state[1] is False:
+                    self.AGV[i + 1].end_state = (self.time, True)
+            if self.AGV[i+1].location == self.AGV[i+1].park_loc and len(self.AGV[i+1].tasklist) > 1:
                 # 叉车从停靠点出发执行任务
                 if self.AGV[i+1].task < 0:
+                    assert self.AGV[i+1].tasklist[0] < 0
                     self.AGV[i+1].tasklist.pop(0)
                     self.AGV[i+1].task = self.AGV[i+1].tasklist[0]
                 self.Task[self.AGV[i+1].task].state = 2
                 self.Map[self.Task[self.AGV[i+1].task].start].reservation = True
                 self.Map[self.Task[self.AGV[i+1].task].end].reservation = True
-                # 在线任务开始执行后将终点序列更新  # todo 待测试
+                # 在线任务开始执行后将终点序列更新
                 if i <= 3 and self.Task[self.AGV[i+1].task].end == self.Task_order[i+1][0]:
                     self.Task_order[i+1].pop(0)
                 self.AGV[i+1].status = 'busy'
@@ -454,7 +476,10 @@ class Problem:
                     self.AGV[i+1].status = 'turning'
                     self.move_status[i] += 1
                 elif abs(l_x-n_x) > 0.6 and l_y != n_y and self.AGV[i+1].status == 'turning':
-                    self.AGV[i+1].status = 'busy'
+                    if self.AGV[i+1].task < 0:
+                        self.AGV[i + 1].status = 'idle'
+                    else:
+                        self.AGV[i+1].status = 'busy'
 
     # 将任务及路径分配给叉车时，更新叉车属性：
     def update_car(self, task_dict):
@@ -475,23 +500,23 @@ class Problem:
                     self.Map[self.Task[self.AGV[i].task].end].reservation = True
                     for j in self.AGV[i].tasklist:
                         if j == self.AGV[i].task:
-                            self.AGV[i].route += self.Task[j].route_seq
+                            self.AGV[i].route += list(self.Task[j].route_seq)
                         else:
                             tmp = list(self.Task[j].route_seq)
-                            tmp.pop(0)
-                            self.AGV[i].route += tmp
+                            self.AGV[i].route += tmp[1:]
                 else:
                     temp = list(self.AGV[i].tasklist)
                     cur_task = temp.pop(0)
-                    # assert self.Task[cur_task].end in self.AGV[i].route
-                    if self.Task[cur_task].end not in self.AGV[i].route:
-                        logger.debug('here')
-                    cur_end_idx = self.AGV[i].route.index(self.Task[cur_task].end)
+                    if self.AGV[i].route.count(self.Task[cur_task].end) > 1:
+                        end_idx = [idx for idx in range(len(self.AGV[i].route)) if self.AGV[i].route[idx] == self.Task[cur_task].end]
+                        first_get_idx = self.AGV[i].route.index(self.Task[cur_task].start)
+                        cur_end_idx = [i for i in end_idx if i > first_get_idx][0]
+                    else:
+                        cur_end_idx = self.AGV[i].route.index(self.Task[cur_task].end)
                     self.AGV[i].route = self.AGV[i].route[:cur_end_idx+1]  # delete undo task
                     for j in temp:
                         tmp = list(self.Task[j].route_seq)
-                        tmp.pop(0)
-                        self.AGV[i].route += tmp
+                        self.AGV[i].route += tmp[1:]
                 if self.AGV[i].task > 0:
                     self.Task[self.AGV[i].task].state = 2
                     self.Task[self.AGV[i].task].car = i
@@ -502,19 +527,28 @@ class Problem:
                         if self.AGV[i].tasklist[j] > 0:
                             self.Task[self.AGV[i].tasklist[j]].state = 1
                             self.Task[self.AGV[i].tasklist[j]].car = i
-            else:  # 进这个循环大概就结束了吧
-                pass  # self.AGV[i].task = None  # 注意task属性为-1时不可以用作Task索引的key值
-            # todo 待修改及测试  # 下面这段可以放到 if self.AGV[i].task is None条件下
+            else:  # 未被分配到任务
+                assert self.AGV[i].task is None
+
             if self.AGV[i].route:
-                if self.AGV[i].route[0] == self.AGV[i].location:
-                    if self.AGV[i].last_loc is None:  # 只在初始化时last_loc为-1
+                if self.AGV[i].route[0] != self.AGV[i].location:
+                    # already updated
+                    assert self.AGV[i].route[0] == self.AGV[i].last_loc
+                    assert self.AGV[i].next_loc == self.AGV[i].location or \
+                           self.AGV[i].next_loc == self.AGV[i].route[2]
+                else:
+                    # update last_loc
+                    if self.AGV[i].last_loc is None:  # 只在初始化时last_loc为None
                         self.AGV[i].route.insert(0, self.AGV[i].location)
                         self.AGV[i].last_loc = self.AGV[i].route[0]
                     else:
                         self.AGV[i].route.insert(0, self.AGV[i].last_loc)
+                    # update next_loc
                     if len(self.AGV[i].route) >= 3:
                         self.AGV[i].next_loc = self.AGV[i].route[2]
                     else:
+                        # only happens in returning
+                        assert self.AGV[i].task < 0
                         self.AGV[i].next_loc = self.AGV[i].location
 
     # 将路径赋予对应任务时，更新任务的路径序列：
@@ -531,20 +565,19 @@ class Problem:
         # part1
         self.collision_check()
         # part2
-        self.update_control_policy()
-        """如果冲突，让冲突的车辆停一轮，状态改为stop"""
+        if self.next_locs is not None:
+            self.update_control_policy()
 
     def finish_identify(self):
-        node_p = True
         if self.time <= 5400:
-            node_p = False
+            self.is_finished = False
         else:
-            for i in range(1, len(self.Task) - 7):
-                if self.Task[i].state != 3:
-                    node_p = False
+            for task in [i for i in self.Task.keys() if i > 0]:
+                if self.Task[task].state != 3:
+                    self.is_finished = False
                     break
-        if node_p:
-            self.is_finished = True
+            else:
+                self.is_finished = True
 
     # 主流程
     def run_step(self):
@@ -555,6 +588,10 @@ class Problem:
         self.deadlock_check()
         self.turning_identify()
         self.arriving_identify()
+
+        # 如果发生死锁，在deadlock_check中已解决，需要更新路径
+        if self.deadlock_happen:
+            self.controller.update_routes(routes={i: self.AGV[i+1].route[2:] for i in range(8)})
 
         if not self.time:
             self.instruction = self.controller.get_instruction(
@@ -570,8 +607,6 @@ class Problem:
 
         for agv in range(8):
             if len(self.AGV[agv+1].route) >= 3:
-                if self.AGV[agv+1].route[2] != self.controller.residual_routes[agv][0]:
-                    logger.debug('here')
                 assert self.AGV[agv+1].route[2] == self.controller.residual_routes[agv][0]
 
         # 下发控制路径 step_list 上一步到底有没有走成功，转弯不算走，移动
@@ -584,5 +619,6 @@ class Problem:
         self.agvs_status_change()
         self.update_step()
         self.finish_identify()
+        self.deadlock_happen = False  # reset deadlock
 
 
