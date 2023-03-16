@@ -30,6 +30,9 @@ sh.close()
 
 log_print_freq = 3000  # (set None to avoid printing log)
 
+planner = Routeplanner_basic
+controller = RouteController
+
 if __name__ == '__main__':
 
     # 数据读入
@@ -38,7 +41,7 @@ if __name__ == '__main__':
                       dictionary_task_online_ending_order, 'uniform', 216, 50)
 
     first_in = True
-    route_planner = Routeplanner_basic(grids=problem.Map)
+    route_planner = planner(grids=problem.Map)
 
     start = time.time()
 
@@ -62,7 +65,7 @@ if __name__ == '__main__':
 
             # 初始化controller
             if first_in:
-                problem.controller = RouteController(
+                problem.controller = controller(
                     routes={i: problem.AGV[i+1].route[2:] for i in range(8)}
                 )
                 first_in = False
