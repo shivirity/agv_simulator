@@ -94,6 +94,7 @@ class AGV:
         self.task_status = None  # 'get', 'put', 'return', None
         self.is_load = 0  # 0表示车上空载，1表示车上有货
         self.end_state = (0, False)  # 车辆任务结束状态，第一项表示结束时间，第二项表示车辆是否已完成所有任务
+        self.waiting_time = 0  # 表示车辆因为控制策略而等待的时间
 
     def get_location(self):  # 考虑可以放在Problem类，依据AGV编号来获取实时位置
         return self.location
@@ -306,7 +307,9 @@ class Problem:
 
             elif not instruction[i] and self.move_status[i] == 0:  # instruction[i] and self.move_status != 0:
                 if self.AGV[i+1].route:  # route为空则说明还没接到任务，控制器能判断出来
-                    self.AGV[i+1].status = 'waiting'  # 该前进但需要等待
+                    if self.AGV[i+1].location != self.AGV[i+1].park_loc:
+                        self.AGV[i+1].status = 'waiting'  # 该前进但需要等待
+                        self.AGV[i+1].waiting_time += self.step
                 self.moving_success[i] = False
             else:  # 该前进但因误差导致无法前进 or 本就无法前进
                 self.moving_success[i] = False

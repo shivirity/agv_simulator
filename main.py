@@ -84,6 +84,12 @@ if __name__ == '__main__':
         logger.info(
             f'task end time = '
             f'{[(problem.AGV[i].end_state[0] if problem.AGV[i].end_state[0] > 0 else problem.time) for i in range(1, 9)]} in seconds')
+        logger.info(
+            f'agv wait time = '
+            f'{[problem.AGV[i].waiting_time for i in range(1, 9)]} in seconds')
+        logger.info(
+            f'avg agv wait time = '
+            f'{int(sum([problem.AGV[i].waiting_time for i in range(1, 9)])/8)} in seconds')
         logger.info(f'deadlock times = {problem.deadlock_times}')
         logger.info(f'loc collision times = {problem.loc_error}')
         logger.info(f'side collision times = {problem.side_error}')
