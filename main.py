@@ -6,8 +6,12 @@ from Prepare import Problem
 from initialize import dictionary_task, dictionary_car, dictionary_task_online_ending_order
 from Map import dictionary_map
 
-from agv_control.RouteControl import RouteController
+# route_plan
 from RoutePlan_basic import Routeplanner_basic
+# route_control
+from agv_control.RouteControl import RouteController
+from agv_control.RouteControl_basic import RouteController_basic
+from agv_control.RouteControl_basic_cor import RouteController_basic_cor
 
 # set logger
 log_colors_config = {
@@ -31,7 +35,7 @@ sh.close()
 log_print_freq = 3000  # (set None to avoid printing log)
 
 planner = Routeplanner_basic
-controller = RouteController
+controller = RouteController_basic
 
 if __name__ == '__main__':
 

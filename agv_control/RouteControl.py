@@ -32,21 +32,21 @@ class RouteController:
 
         :param routes: 每车规划路径
         """
+        routes = copy.deepcopy(routes)
         # 全局常量
-        self.num_of_nodes = NUM_OF_NODES  # map路径信息
+        self.num_of_nodes = NUM_OF_NODES  # 节点数量
         self.num_of_agv = NUM_OF_AGVS  # agv数量
 
         # 路径规划相关
-        self.residual_routes = routes  # 车辆规划路径（包含转弯耗时）, dict
+        self.residual_routes = routes  # 车辆剩余路径, dict
 
         # 全局变量
         self.reservation = None  # PR哈希, -1 -> 未预定, >=0 -> 被对应编号预定
         self.hash_route = [[] for _ in range(self.num_of_nodes+1)]  # list
         self.update_shared_flag = [True for _ in range(self.num_of_agv)]
-        self.update_route_free = False
+        self.update_route_free = False  # 路径更新后不再进行是否step的更新
 
         # 计算相关
-        # self.total_shared_routes = self._init_total_shared_routes()  # dict
         self.shared_routes = {agv: None for agv in range(self.num_of_agv)}  # dict
         self.shared_agvs = {agv: None for agv in range(self.num_of_agv)}  # dict
 
@@ -72,7 +72,7 @@ class RouteController:
 
     def _update_hash_route(self, agv: int, former_route: list = None):
         """
-        车辆residual_route更新时调用
+        车辆hash_route更新时调用
 
         :param agv: 待更新的车辆编号
         :param former_route: 车辆原来路径，为None代表系统初始化
@@ -154,16 +154,17 @@ class RouteController:
             return False
 
     def update_routes(self, routes: dict):
-        routes = copy.deepcopy(routes)
         """利用 new_routes 更新各车辆 residual route"""
+        routes = copy.deepcopy(routes)
         assert isinstance(routes, dict)
         self.update_shared_flag = [True for _ in range(self.num_of_agv)]  # update允许更新列表
+        # 更新 hash_route 和 residual_route
         for key, route in routes.items():
             former_route = list(self.residual_routes[key])
             self.residual_routes[key] = route  # update剩余路径
             self._update_hash_route(agv=key, former_route=former_route)  # update路径hash
             logger.debug(f'AGV{key} route updated.')
-        # 更新 hash_route 和 residual_route
+        # update shared routes
         self._init_shared_routes()
         self.update_route_free = True
 

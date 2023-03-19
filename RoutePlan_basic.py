@@ -68,7 +68,6 @@ class A_star:
             # 选出下一个合适的点
             vector = self.popLowGHNode()  # vector: NodeVector
             # 获取合适点周围所有的邻居
-            # todo 这里的neighbor是索引
             neighbors = [self.grids[i] for i in vector.node.neighbor if not self.is_closed(i)]
             for neighbor in neighbors:
                 # 初始化邻居，并计算g和h

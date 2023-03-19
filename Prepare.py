@@ -511,9 +511,12 @@ class Problem:
                     temp = list(self.AGV[i].tasklist)
                     cur_task = temp.pop(0)
                     if self.AGV[i].route.count(self.Task[cur_task].end) > 1:
-                        end_idx = [idx for idx in range(len(self.AGV[i].route)) if self.AGV[i].route[idx] == self.Task[cur_task].end]
-                        first_get_idx = self.AGV[i].route.index(self.Task[cur_task].start)
-                        cur_end_idx = [i for i in end_idx if i > first_get_idx][0]
+                        if cur_task > 0:  # 非返回任务
+                            end_idx = [idx for idx in range(len(self.AGV[i].route)) if self.AGV[i].route[idx] == self.Task[cur_task].end]
+                            first_get_idx = self.AGV[i].route.index(self.Task[cur_task].start)
+                            cur_end_idx = [i for i in end_idx if i > first_get_idx][0]
+                        else:  # 返回任务在第一个停靠点
+                            cur_end_idx = self.AGV[i].route.index(self.Task[cur_task].end)
                     else:
                         cur_end_idx = self.AGV[i].route.index(self.Task[cur_task].end)
                     self.AGV[i].route = self.AGV[i].route[:cur_end_idx+1]  # delete undo task
@@ -580,7 +583,12 @@ class Problem:
                     self.is_finished = False
                     break
             else:
-                self.is_finished = True
+                for agv in self.AGV.keys():
+                    if self.AGV[agv].location != self.AGV[agv].park_loc:
+                        self.is_finished = False
+                        break
+                else:
+                    self.is_finished = True
 
     # 主流程
     def run_step(self):
