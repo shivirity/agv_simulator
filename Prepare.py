@@ -302,8 +302,8 @@ class Problem:
                     self.AGV[i+1].next_loc = self.AGV[i+1].route[2]
                 else:  # 进入停靠点
                     assert self.AGV[i+1].location == self.AGV[i+1].park_loc
-                    assert len(self.AGV[i+1].route) == 2
-                    assert not self.AGV[i+1].tasklist
+                    assert len(self.AGV[i+1].route) == 2, f'{i+1, self.AGV[i+1].route}'
+                    assert not self.AGV[i+1].tasklist, f'{i+1}'
 
             elif not instruction[i] and self.move_status[i] == 0:  # instruction[i] and self.move_status != 0:
                 if self.AGV[i+1].route:  # route为空则说明还没接到任务，控制器能判断出来
@@ -496,7 +496,7 @@ class Problem:
             self.AGV[i].tasklist = list(task_dict[i])
             if self.AGV[i].tasklist:  # 判断列表不为空
                 if self.AGV[i].task is None:  # 包括初始化  # 或self.AGV[i].task_status == None
-                    assert len(self.AGV[i].route) == 0, f'agv{i}'
+                    assert len(self.AGV[i].route) == 0 or len(self.AGV[i].route) == 2, f'agv{i}'
                     self.AGV[i].task = self.AGV[i].tasklist[0]
                     self.AGV[i].task_status = 'get'
                     self.Map[self.Task[self.AGV[i].task].start].reservation = True
