@@ -503,7 +503,10 @@ class Problem:
                     self.Map[self.Task[self.AGV[i].task].end].reservation = True
                     for j in self.AGV[i].tasklist:
                         if j == self.AGV[i].task:
-                            self.AGV[i].route += list(self.Task[j].route_seq)
+                            if len(self.AGV[i].route) == 2:
+                                self.AGV[i].route += list(self.Task[j].route_seq[1:])
+                            else:
+                                self.AGV[i].route += list(self.Task[j].route_seq)
                         else:
                             tmp = list(self.Task[j].route_seq)
                             self.AGV[i].route += tmp[1:]
