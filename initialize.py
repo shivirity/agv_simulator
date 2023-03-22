@@ -31,7 +31,8 @@ def create_task_offline(df_task_off):
         # todo 如果离线任务需要修改指派，此处的任务状态需要修改
         dict_task[i+1] = task_tmp
     for i in range(1, 9):  # 此处没有用叉车的数量，直接用了8
-        dict_task[-i] = Task(-i, None, None, None, init_loc[i-1], None, i)  # 更新每辆车的return任务
+        dict_task[-i] = Task(
+            num=-i, arrival=None, task_type=None, start=init_loc[i-1], end=init_loc[i-1], state=None, car=i)  # 更新每辆车的return任务
     return dict_task
 
 

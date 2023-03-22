@@ -141,16 +141,18 @@ class RouteController_basic:
             logger.debug(f'AGV{key} route updated.')
         self.update_route_free = True
 
-    def get_instruction(self, status_list: list, loc_list: list, step_list: list = None) -> list:
+    def get_instruction(self, status_list: list, loc_list: list, undo_offline_tasks: list, step_list: list = None) -> list:
         """
         返回每辆车的控制策略（以列表形式）
 
         :param status_list: 每辆车的当前状态，布尔变量表示车辆当前是否可以前进，len=8
         :param loc_list: 当前所有车辆位置（节点编号），len=8
+        :param undo_offline_tasks: 未完成的离线任务列表
         :param step_list: 表示在当前节点是否前进，用以更新 residual routes，True为已前进，False为未前进，len=8
         :return: 车辆控制策略列表
         """
         loc_list = list(loc_list)
+        undo_offline_tasks = list(undo_offline_tasks)
         for loc in loc_list:
             assert loc is not None, f'{loc}'
         for agv in range(self.num_of_agv):

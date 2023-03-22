@@ -1,3 +1,4 @@
 colorlog==6.7.0
 numpy==1.23.1
 pandas==1.4.3
+gurobipy==10.0.1

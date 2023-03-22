@@ -54,6 +54,9 @@ class RouteController:
         self._init_hash_route()
         self._init_shared_routes()
 
+        # 随机因素
+        self.online_first_rate = 0.5
+
     @staticmethod
     def _is_list_contained(lists, listl):
         """判断 lists 是否包含在 listl 中，是则返回 True"""
@@ -168,18 +171,20 @@ class RouteController:
         self._init_shared_routes()
         self.update_route_free = True
 
-    def get_instruction(self, status_list: list, loc_list: list, step_list: list = None) -> list:
+    def get_instruction(self, status_list: list, loc_list: list, undo_offline_tasks: list, step_list: list = None) -> list:
         """
         返回每辆车的控制策略（以列表形式）
 
         :param status_list: 每辆车的当前状态，布尔变量表示车辆当前是否可以前进，len=8
         :param loc_list: 当前所有车辆位置（节点编号），len=8
+        :param undo_offline_tasks: 未完成的离线任务列表
         :param step_list: 表示在当前节点是否前进，用以更新 residual routes，True为已前进，False为未前进，len=8
         :return: 车辆控制策略列表
         """
 
         # 更新 reservation
         loc_list = list(loc_list)
+        undo_offline_tasks = list(undo_offline_tasks)
         for loc in loc_list:
             assert loc is not None, f'{loc}'
         self._update_reservation(loc_list=loc_list)
@@ -246,7 +251,10 @@ class RouteController:
 
         control_list = []  # 控制指令列表
         # 对比潜在路径，更新权限申请情况
-        for agv in range(self.num_of_agv):
+        import random
+        agv_order = list(range(self.num_of_agv)) \
+            if random.random() < self.online_first_rate else [4, 5, 6, 7, 0, 1, 2, 3]
+        for agv in agv_order:
             if not status_list[agv]:  # agv无法行驶
                 control_list.append(False)
             else:  # agv可以行驶
@@ -267,6 +275,8 @@ class RouteController:
                         control_list.append(True)
                     else:  # 无法申请条件
                         control_list.append(False)
-
+        control_list_new = [_ for _ in range(self.num_of_agv)]
+        for i in range(len(agv_order)):
+            control_list_new[agv_order[i]] = control_list[i]
         assert len(control_list) == self.num_of_agv
-        return control_list
+        return control_list_new

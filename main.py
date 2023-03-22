@@ -34,8 +34,13 @@ sh.close()
 
 log_print_freq = 3000  # (set None to avoid printing log)
 
+planner_choose = 'new'  # 'new' or 'baseline'
 planner = Routeplanner_basic
-controller = RouteController_basic
+controller = RouteController
+
+# new route_scheduling parameters
+candidate_path_num = 5
+max_agv_task_num = 2
 
 if __name__ == '__main__':
 
@@ -57,14 +62,22 @@ if __name__ == '__main__':
 
         if problem.time % 216 == 0 or problem.online_task_arrival:  # 路径规划的更新节点判断条件
 
-            task_dict = route_planner.route_scheduling(
-                agv_loc=problem.get_agv_location(),
-                agv_task_list=problem.get_agv_tasklist(),
-                agv_status_list=problem.get_agv_task_status(),
-                task_to_plan=problem.get_task_not_perform(),
-                task_dict=problem.Task,
-                outer_dict=problem.Task_order
-            )
+            # 设定候选路径集数量及每次更新后叉车上最多的任务数
+            if planner_choose == 'new':
+                task_dict = problem.route_scheduling(
+                    time=problem.time, agv_max_task_num=max_agv_task_num, candidate_num=candidate_path_num)
+            elif planner_choose == 'baseline':
+                task_dict = route_planner.route_scheduling(
+                    agv_loc=problem.get_agv_location(),
+                    agv_task_list=problem.get_agv_tasklist(),
+                    agv_status_list=problem.get_agv_task_status(),
+                    task_to_plan=problem.get_task_not_perform(),
+                    task_dict=problem.Task,
+                    outer_dict=problem.Task_order
+                )
+            else:
+                logger.warning(f'planner choose wrong!')
+
             problem.update_car(task_dict=task_dict)
 
             # 初始化controller
