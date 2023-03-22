@@ -413,7 +413,7 @@ class Problem:
 
     # 返回未完成的离线任务编号
     def get_undo_offline_task(self):
-        undo_offline_task = [i for i in self.Task.keys() if 0 < i < 101 and self.Task[i].state != 3]
+        return [i for i in self.Task.keys() if 0 < i < 101 and self.Task[i].state != 3]
 
     # 返回货位情况
     def get_cargo_state(self):
