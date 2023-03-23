@@ -9,9 +9,10 @@ from Map import dictionary_map
 # route_plan
 from RoutePlan_basic import Routeplanner_basic
 # route_control
-from agv_control.RouteControl import RouteController
+from agv_control.RouteControl_basic_multitask import RouteController_basic_multitask
 from agv_control.RouteControl_basic import RouteController_basic
 from agv_control.RouteControl_basic_cor import RouteController_basic_cor
+from agv_control.RouteControl import RouteController
 
 # set logger
 log_colors_config = {
@@ -35,7 +36,6 @@ sh.close()
 log_print_freq = 3000  # (set None to avoid printing log)
 
 planner_choose = 'new'  # 'new' or 'baseline'
-planner = Routeplanner_basic
 controller = RouteController
 
 # new route_scheduling parameters
@@ -50,7 +50,7 @@ if __name__ == '__main__':
                       dictionary_task_online_ending_order, 'uniform', 216, 50)
 
     first_in = True
-    route_planner = planner(grids=problem.Map)
+    route_planner = Routeplanner_basic(grids=problem.Map)
 
     start = time.time()
 
@@ -77,6 +77,7 @@ if __name__ == '__main__':
                 )
             else:
                 logger.warning(f'planner choose wrong!')
+                assert False
 
             problem.update_car(task_dict=task_dict)
 
@@ -87,12 +88,14 @@ if __name__ == '__main__':
                 )
                 first_in = False
             else:
-                problem.controller.update_routes(routes={i: problem.AGV[i+1].route[2:] for i in range(8)})
+                problem.controller.update_routes(routes={i: problem.AGV[i+1].route[1:] for i in range(8)})
 
         # 系统动态更新
         problem.run_step()
         if problem.time % int(log_print_freq) == 0 and log_print_freq is not None:
             logger.info(f'time={problem.time}, cur_agv_loc={problem.get_agv_location()}')
+        if problem.time == 230:
+            logger.debug('here')
 
     else:
         end = time.time()

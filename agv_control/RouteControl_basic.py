@@ -38,7 +38,7 @@ class RouteController_basic:
         7: list(range(796, 829)) + [140] + list(range(383, 413)),
     }
 
-    wait = 20  # 等待side collision
+    wait = 0  # 等待side collision
 
     def __init__(self, routes: dict):
         """
@@ -136,7 +136,7 @@ class RouteController_basic:
         assert isinstance(routes, dict)
         for key, route in routes.items():
             former_route = list(self.residual_routes[key])
-            self.residual_routes[key] = route  # update剩余路径
+            self.residual_routes[key] = route[1:]  # update剩余路径
             self._update_hash_route(agv=key, former_route=former_route)  # update路径hash
             logger.debug(f'AGV{key} route updated.')
         self.update_route_free = True

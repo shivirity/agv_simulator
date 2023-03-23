@@ -25,18 +25,7 @@ NUM_OF_NODES = 829
 NUM_OF_AGVS = 8
 
 
-class RouteController:
-    safe_grids = {
-        0: list(range(664, 697)) + [363, 364],
-        1: list(range(631, 664)) + [361, 362],
-        2: list(range(598, 631)) + [357, 358, 359, 360],
-        3: list(range(565, 598)) + [353, 354],
-        4: list(range(697, 829)) + [63, 64, 65, 66] + list(range(437, 517)) + list(range(383, 413)),
-        5: list(range(697, 829)) + [54, 55, 56, 57] + list(range(437, 517)) + list(range(383, 413)),
-        6: list(range(697, 829)) + [133, 134, 135] + list(range(437, 517)) + list(range(383, 413)),
-        7: list(range(697, 829)) + [138, 139, 140] + list(range(383, 413)) + list(range(437, 517)),
-    }
-
+class RouteController_basic_multitask:
     def __init__(self, routes: dict):
         """
         初始化
@@ -53,7 +42,7 @@ class RouteController:
 
         # 全局变量
         self.reservation = None  # PR哈希, -1 -> 未预定, >=0 -> 被对应编号预定
-        self.hash_route = [[] for _ in range(self.num_of_nodes + 1)]  # list
+        self.hash_route = [[] for _ in range(self.num_of_nodes+1)]  # list
         self.update_shared_flag = [True for _ in range(self.num_of_agv)]
         self.update_route_free = False  # 路径更新后不再进行是否step的更新
 
@@ -62,12 +51,11 @@ class RouteController:
         self.shared_agvs = {agv: None for agv in range(self.num_of_agv)}  # dict
 
         # 初始化
-        self.init_loc = [364, 362, 360, 354, 66, 57, 135, 140]
-        self._init_hash_route(cur_loc=self.init_loc)
+        self._init_hash_route()
         self._init_shared_routes()
 
         # 随机因素
-        self.online_first_rate = 1
+        self.online_first_rate = 0.5
 
     @staticmethod
     def _is_list_contained(lists, listl):
@@ -80,24 +68,34 @@ class RouteController:
         else:
             return True
 
-    def _init_hash_route(self, cur_loc: list):
+    def _init_hash_route(self):
         """利用初始residual route初始化hash节点占据"""
-        cur_loc = list(cur_loc)
-        self._update_hash_route(cur_loc=cur_loc)
-
-    def _update_hash_route(self, cur_loc: list):
-        """车辆hash_route更新时调用"""
-        cur_loc = list(cur_loc)
-        self.hash_route = [[] for _ in range(self.num_of_nodes + 1)]
-        for i in range(len(cur_loc)):
-            if cur_loc[i] is None:
-                continue
-            if cur_loc[i] not in self.safe_grids[i]:
-                self.hash_route[cur_loc[i]] = [i]
         for agv in range(self.num_of_agv):
+            self._update_hash_route(agv=agv)
+
+    def _update_hash_route(self, agv: int, former_route: list = None):
+        """
+        车辆hash_route更新时调用
+
+        :param agv: 待更新的车辆编号
+        :param former_route: 车辆原来路径，为None代表系统初始化
+        :return:
+        """
+        # clear former route
+        if former_route is not None:
+            former_route = list(former_route)
+            for grid in former_route:
+                if agv in self.hash_route[grid]:
+                    self.hash_route[grid].remove(agv)
+            # add new route
             for grid in self.residual_routes[agv]:
-                if grid in self.safe_grids[agv]:
-                    break
+                if not self.hash_route[grid]:
+                    self.hash_route[grid] = [agv]
+                if agv not in self.hash_route[grid]:
+                    self.hash_route[grid].append(agv)
+                assert self.hash_route[grid].count(agv) == 1
+        else:
+            for grid in self.residual_routes[agv]:
                 if not self.hash_route[grid]:
                     self.hash_route[grid] = [agv]
                 else:
@@ -113,15 +111,10 @@ class RouteController:
     def _update_shared_routes(self, agv: int) -> bool:
         """更新共享路径，路径未更新时调用，返回shared_routes是否为空路径，为空False，不为空True"""
         for _grid in self.residual_routes[agv]:
-            if _grid in self.safe_grids[agv]:
-                self.shared_routes[agv] = []
-                self.shared_agvs[agv] = []
-                return False
-            else:
-                assert agv in self.hash_route[_grid]
-                if len(self.hash_route[_grid]) > 1:
-                    start_grid = _grid
-                    break
+            assert agv in self.hash_route[_grid]
+            if len(self.hash_route[_grid]) > 1:
+                start_grid = _grid
+                break
         else:
             self.shared_routes[agv] = []
             self.shared_agvs[agv] = []
@@ -136,7 +129,7 @@ class RouteController:
                 shared_routes.append(grid)
                 shared_agvs.append([item for item in self.hash_route[grid] if item != agv])
             else:
-                assert len(self.hash_route[grid]) == 1 or grid in self.safe_grids[agv]
+                assert len(self.hash_route[grid]) == 1
                 break
 
         self.shared_routes[agv] = list(shared_routes)
@@ -145,7 +138,7 @@ class RouteController:
 
     def _update_reservation(self, loc_list: list) -> None:
         """利用当前位置更新预定，仅保留当前位置"""
-        self.reservation = [-1 if i not in loc_list else loc_list.index(i) for i in range(self.num_of_nodes + 1)]
+        self.reservation = [-1 if i not in loc_list else loc_list.index(i) for i in range(self.num_of_nodes+1)]
 
     def _is_shared_reserved(self, agv) -> bool:
         """
@@ -168,20 +161,17 @@ class RouteController:
         routes = copy.deepcopy(routes)
         assert isinstance(routes, dict)
         self.update_shared_flag = [True for _ in range(self.num_of_agv)]  # update允许更新列表
-        loc_list = []
         # 更新 hash_route 和 residual_route
         for key, route in routes.items():
+            former_route = list(self.residual_routes[key])
             self.residual_routes[key] = route[1:]  # update剩余路径
-            loc_list.append(route[0] if len(route) else None)
+            self._update_hash_route(agv=key, former_route=former_route)  # update路径hash
             logger.debug(f'AGV{key} route updated.')
-        # update hash routes
-        self._init_hash_route(cur_loc=loc_list)
         # update shared routes
         self._init_shared_routes()
         self.update_route_free = True
 
-    def get_instruction(self, status_list: list, loc_list: list, undo_offline_tasks: list,
-                        step_list: list = None) -> list:
+    def get_instruction(self, status_list: list, loc_list: list, undo_offline_tasks: list, step_list: list = None) -> list:
         """
         返回每辆车的控制策略（以列表形式）
 
@@ -202,26 +192,66 @@ class RouteController:
         if step_list is not None and not self.update_route_free:
             # update residual_routes & hash_route
             step_grid_list = []  # 记录各车上一步路过节点，未前进则为-1
-            # update residual_routes
             for agv in range(self.num_of_agv):
                 if step_list[agv]:  # 前进节点
                     assert len(self.residual_routes[agv]) > 0
-                    assert agv in self.hash_route[self.residual_routes[agv][0]] or \
-                           self.residual_routes[agv][0] in self.safe_grids[agv], f'{self.hash_route[self.residual_routes[agv][0]]}'
+                    assert agv in self.hash_route[self.residual_routes[agv][0]], f'{self.hash_route[self.residual_routes[agv][0]]}'
                     step_grid = self.residual_routes[agv].pop(0)  # update residual_routes
                     step_grid_list.append(step_grid)
+                    if step_grid not in self.residual_routes[agv]:
+                        self.hash_route[step_grid].remove(agv)  # update hash_route
                 else:  # 未前进节点
                     step_grid_list.append(-1)
-            # update hash_route
-            self._init_hash_route(cur_loc=loc_list)
-            # update shared_routes & shared_agvs
-            self._init_shared_routes()
 
+            # update shared_routes & shared_agvs
+            for agv in range(self.num_of_agv):
+                # 没有剩余路径，需要更新或指示任务完成
+                if len(self.residual_routes[agv]) == 0:
+                    # logging.warning(f'AGV{agv} needs to update residual route.')
+                    pass
+                # 有剩余路径
+                else:
+                    # 如果前进，则删去shared route里的对应元素（如果存在）
+                    if step_list[agv]:
+                        if step_grid_list[agv] in self.shared_routes[agv]:
+                            del_idx = self.shared_routes[agv].index(step_grid_list[agv])
+                            assert del_idx == 0
+                            self.shared_routes[agv].pop(del_idx)
+                            self.shared_agvs[agv].pop(del_idx)
+
+                    if not self.shared_routes[agv]:
+                        # check 其他车辆前进
+                        for _idx in range(len(self.shared_routes[agv])):
+                            # update due to moving forward
+                            if self._is_list_contained(
+                                    lists=self.shared_agvs[agv][_idx],
+                                    listl=self.hash_route[self.shared_routes[agv][_idx]]):
+                                assert len(self.hash_route[self.shared_routes[agv][_idx]]) == len(
+                                    self.shared_agvs[agv][_idx]) + 1
+                            else:
+                                # delete
+                                assert len(self.hash_route[self.shared_routes[agv][_idx]]) >= 1
+                                if len(self.hash_route[self.shared_routes[agv][_idx]]) == 1:
+                                    assert self.hash_route[self.shared_routes[agv][_idx]][0] == agv
+                                    self.shared_routes[agv] = self.shared_routes[agv][:_idx]
+                                    self.shared_agvs[agv] = self.shared_agvs[agv][:_idx]
+                                    break
+                                # update grid
+                                else:
+                                    for ano_agv in self.shared_agvs[agv][_idx]:
+                                        if ano_agv not in self.hash_route[self.shared_routes[agv][_idx]]:
+                                            self.shared_agvs[agv][_idx].remove(ano_agv)
+
+                # 若 shared_route 为空，则更新下一段最新的
+                if len(self.shared_routes[agv]) == 0 and self.update_shared_flag[agv]:
+                    flag = self._update_shared_routes(agv=agv)
+                    if not flag:
+                        self.update_shared_flag[agv] = flag
         self.update_route_free = False
 
         control_list = []  # 控制指令列表
         # 对比潜在路径，更新权限申请情况
-        online_first_flag = True if len(undo_offline_tasks) > (1 - self.online_first_rate) * 100 else False
+        online_first_flag = True if len(undo_offline_tasks) > (1-self.online_first_rate) * 100 else False
         # agv_order = list(range(self.num_of_agv)) if online_first_flag else [4, 5, 6, 7, 0, 1, 2, 3]
         agv_order = [0, 1, 2, 3, 5, 6, 4, 7] if online_first_flag else [5, 6, 4, 7, 0, 1, 2, 3]
         for agv in agv_order:

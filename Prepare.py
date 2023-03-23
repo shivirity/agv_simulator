@@ -469,10 +469,11 @@ class Problem:
                 self.Map[self.Task[self.AGV[i+1].task].start].reservation = True
                 self.Map[self.Task[self.AGV[i+1].task].end].reservation = True
                 # 在线任务开始执行后将终点序列更新
-                if i <= 3 and self.Task[self.AGV[i+1].task].end == self.Task_order[i+1][0]:
-                    self.Task_order[i+1].pop(0)
-                self.AGV[i+1].status = 'busy'
-                self.AGV[i+1].task_status = 'get'
+                if i <= 3 and self.Task_order[i+1]:
+                    if self.Task[self.AGV[i+1].task].end == self.Task_order[i+1][0]:
+                        self.Task_order[i+1].pop(0)
+                    self.AGV[i+1].status = 'busy'
+                    self.AGV[i+1].task_status = 'get'
 
     # 车辆转弯的判断
     def turning_identify(self):
@@ -566,6 +567,7 @@ class Problem:
                         # only happens in returning
                         assert self.AGV[i].task < 0
                         self.AGV[i].next_loc = self.AGV[i].location
+        logger.info('route updated.')
 
     # 将路径赋予对应任务时，更新任务的路径序列：
     def update_task(self):
@@ -630,7 +632,7 @@ class Problem:
 
         for agv in range(8):
             if len(self.AGV[agv+1].route) >= 3:
-                assert self.AGV[agv+1].route[2] == self.controller.residual_routes[agv][0]
+                assert self.AGV[agv+1].route[2] == self.controller.residual_routes[agv][0], f'{agv}'
 
         # 下发控制路径 step_list 上一步到底有没有走成功，转弯不算走，移动
 
@@ -644,6 +646,7 @@ class Problem:
         self.finish_identify()
         self.deadlock_happen = False  # reset deadlock
 
+    # 路径规划及任务调度
     # 路径规划及任务调度
     def route_scheduling(self, time, agv_max_task_num=2, candidate_num=5):
         class Path:
@@ -660,42 +663,34 @@ class Problem:
             stock_entrance_path[stock_path.loc[i][0], stock_path.loc[i][1]] = [int(x) for x in stock_entrance_path[stock_path.loc[i][0], stock_path.loc[i][1]]]
         path_candidate = pd.read_csv("config/{}_all_path_candidate.csv".format(candidate_num))
         path_candidate['Paths'] = path_candidate['Paths'].apply(literal_eval)
+        path_candidate['Route time'] = path_candidate['Route time'].apply(literal_eval)
+        path_candidate['Static congestion'] = path_candidate['Static congestion'].apply(literal_eval)
         for i in range(len(path_candidate['Paths'])):
             for j in range(len(path_candidate.loc[i]['Paths'])):
                 path_candidate.loc[i]['Paths'][j] = [int(x) for x in path_candidate.loc[i]['Paths'][j]]
-        path_candidate['Route time'] = path_candidate['Route time'].apply(literal_eval)
         for i in range(len(path_candidate['Route time'])):
             for j in range(len(path_candidate.loc[i]['Route time'])):
                 path_candidate.loc[i]['Route time'][j] = int(path_candidate.loc[i]['Route time'][j])
-        path_candidate['Static congestion'] = path_candidate['Static congestion'].apply(literal_eval)
-        for i in range(len(path_candidate['Static congestion'])):
-            for j in range(len(path_candidate.loc[i]['Static congestion'])):
                 path_candidate.loc[i]['Static congestion'][j] = int(path_candidate.loc[i]['Static congestion'][j])
         '''建立模型'''
         task_not_assigned = self.get_task_not_assigned()
         task_not_perform = self.get_task_not_perform()
         # 获取任务列表
-        flow_task = []
-        stock_task = []
         task_f_end = {}
-        for i in (task_not_perform + task_not_assigned):
-            if i > 100:
-                flow_task.append(i)
-            else:
-                stock_task.append(i)
+        flow_task = [i for i in (task_not_perform + task_not_assigned) if i > 100]
+        stock_task = [i for i in (task_not_perform + task_not_assigned) if i <= 100]
         flow_task = list(set(flow_task))
         stock_task = list(set(stock_task))
-        stock_task_i = {
-            1: [i for i in stock_task if 1 <= i < 26],
-            2: [i for i in stock_task if 26 <= i < 51],
-            3: [i for i in stock_task if 51 <= i < 76],
-            4: [i for i in stock_task if 76 <= i < 101]}
+        stock_task_i = {}
+        stock_task_i[1] = [i for i in stock_task if 1 <= i < 26]
+        stock_task_i[2] = [i for i in stock_task if 26 <= i < 51]
+        stock_task_i[3] = [i for i in stock_task if 51 <= i < 76]
+        stock_task_i[4] = [i for i in stock_task if 76 <= i < 101]
         for i in range(1, 5):
             stock_task_i[i].sort(reverse=True)
         flow_task.sort(reverse=False)
         current = self.get_agv_task()
         current_task = current.copy()
-        '''把当前未执行任何任务定为-v任务'''
         current_not_virtual_task = {}
         for i in range(len(current_task)):
             current_not_virtual_task[i + 1] = [current_task[i]]
@@ -705,11 +700,9 @@ class Problem:
             if current_task[i] < 0:
                 current_not_virtual_task[i + 1] = []
         agv_task = {}
-        factual_f_task_num = {}
         factual_s_task_num = {}
         for i in range(1, 5):
             factual_s_task_num[i] = 0
-            factual_f_task_num[i] = 0
         for i in range(len(current_task)):
             if current_task[i] is None or current_task[i] <= 0:
                 agv_task[i + 1] = 0
@@ -723,9 +716,6 @@ class Problem:
                     factual_s_task_num[3] += 1
                 elif 76 <= current_task[i] < 101:
                     factual_s_task_num[4] += 1
-        for i in range(1, 5):
-            if agv_task[i] == 1:
-                factual_f_task_num[i] += 1
         # 定义变量
         V_f = [1, 2, 3, 4]  # 流水线区域的叉车
         V_s = [5, 6, 7, 8]  # 中转库区域的叉车
@@ -737,16 +727,16 @@ class Problem:
                 m.extend([v])
         for n in m:
             V_f.remove(n)
-
         agv_max_task = {}
         update_task_f_num = 0
         for v in V_f:
-            agv_max_task[v] = min(len(candidate_area[v]), (agv_max_task_num - factual_f_task_num[v]))
+            agv_max_task[v] = min(len(candidate_area[v]), (agv_max_task_num - agv_task[v]))
             update_task_f_num += agv_max_task[v]
         if len(flow_task) >= update_task_f_num:
             task_f = flow_task[:update_task_f_num]
         else:
             task_f = flow_task
+
         task_s = []
         task_s_i = {}
         for i in range(1, 5):
@@ -756,20 +746,20 @@ class Problem:
             else:
                 task_s_i[i] = stock_task_i[i]
                 task_s += stock_task_i[i]
-
+        '''考虑是否删掉对应车辆'''
         m = []
-        for v in V_s:
-            if len(task_s_i[v - 4]) == 0:
-                m.extend([v])
+        for i in range(1, 5):
+            if len(task_s_i[i]) == 0:
+                for v in V_s:
+                    if (1 + 25 * (i - 1)) <= current_task[v - 1] < (1 + 25 * i) or current_task[v - 1] is None or current_task[v - 1] < 0:
+                        m.extend([v])
+        m = list(set(m))
         for n in m:
             V_s.remove(n)
+        R = [i for i in range(1, 5) if len(task_s_i[i]) > 0]
 
-        _I_f = []
-        _I_s = []
-        for v in V_f:
-            _I_f.extend([-v])
-        for v in V_s:
-            _I_s.extend([-v])
+        _I_f = [-v for v in V_f]
+        _I_s = [-v for v in V_s]
         I_f = task_f.copy()  # 流水线区域更新的任务
         I_s = task_s.copy()  # 中转库区域更新的任务
         I_f_0 = task_f.copy()
@@ -789,42 +779,28 @@ class Problem:
         P_s = list(range(candidate_num))
         Q_f = list(range(candidate_num))
         Q_s = list(range(candidate_num))
-        R = []
-        for i in range(1, 5):
-            if len(task_s_i[i]) > 0:
-                R.append(i)
 
         # 流水线任务i对应叉车v的路径集更新
         for v in V_f:
             for i in (I_f + [-v] + current_not_virtual_task[v]):
+                m = self.Map[self.Task[i].start].entrance
                 if i < 0 or (len(current_not_virtual_task[v]) > 0 and i == current_not_virtual_task[v][0]):
-                    # 先暂定对应叉车v都去向同一个节点，是否放入该列根据当前列的放置状态进行决定
-                    for j in range(len(path_candidate)):
-                        if path_candidate.loc[j][0] == self.Map[self.Task[i].start].entrance and path_candidate.loc[j][
-                            1] == self.Map[self.Task[i].end].entrance:
-                            x = Path()
-                            x.start_node = path_candidate.loc[j][0]
-                            x.end_node = path_candidate.loc[j][1]
-                            x.Paths = path_candidate.loc[j][2]
-                            x.path_time = path_candidate.loc[j][3]
-                            x.static_congestion = path_candidate.loc[j][4]
-                            pathf_i_v[i, v] = x
-                            break
+                    n = self.Map[self.Task[i].end].entrance
                 else:
-                    for j in range(len(path_candidate)):
-                        if path_candidate.loc[j][0] == self.Map[self.Task[i].start].entrance and path_candidate.loc[j][
-                            1] == self.Map[candidate_area[v][0]].entrance:
-                            task_f_end[i, v] = candidate_area[v][0]
-                            # 先暂时将所有终点统一为当前可放置货物的第一个节点
-                            self.Task[i].end = candidate_area[v][0]
-                            x = Path()
-                            x.start_node = path_candidate.loc[j][0]
-                            x.end_node = path_candidate.loc[j][1]
-                            x.Paths = path_candidate.loc[j][2]
-                            x.path_time = path_candidate.loc[j][3]
-                            x.static_congestion = path_candidate.loc[j][4]
-                            pathf_i_v[i, v] = x
-                            break
+                    # 先暂定对应叉车v都去向当前可放置货物的第一个节点
+                    n = self.Map[candidate_area[v][0]].entrance
+                    task_f_end[i, v] = candidate_area[v][0]
+                    self.Task[i].end = candidate_area[v][0]
+                for j in range(len(path_candidate)):
+                    if path_candidate.loc[j][0] == m and path_candidate.loc[j][1] == n:
+                        x = Path()
+                        x.start_node = path_candidate.loc[j][0]
+                        x.end_node = path_candidate.loc[j][1]
+                        x.Paths = path_candidate.loc[j][2]
+                        x.path_time = path_candidate.loc[j][3]
+                        x.static_congestion = path_candidate.loc[j][4]
+                        pathf_i_v[i, v] = x
+                        break
 
         # 中转库任务i对应叉车v的路径集更新
         for v in V_s:
@@ -846,34 +822,22 @@ class Problem:
             for i in (I_f + [current_task[v - 1]]):
                 for j in (I_f + [-v]):
                     if (i == current_task[v - 1]) or (i < 0):
-                        for m in range(len(path_candidate)):
-                            '''根据当前库位占用情况，决定在哪个路径节点停留'''
-                            if path_candidate.loc[m][0] == self.Map[self.Task[i].end].entrance and \
-                                    path_candidate.loc[m][1] == \
-                                    self.Map[self.Task[j].start].entrance:
-                                x = Path()
-                                x.start_node = path_candidate.loc[m][0]
-                                x.end_node = path_candidate.loc[m][1]
-                                x.Paths = path_candidate.loc[m][2]
-                                x.path_time = path_candidate.loc[m][3]
-                                x.static_congestion = path_candidate.loc[m][4]
-                                qf_i_j_v[i, j, v] = x
-                                break
+                        p = self.Map[self.Task[i].end].entrance
                     else:
-                        for m in range(len(path_candidate)):
-                            if path_candidate.loc[m][0] == self.Map[task_f_end[i, v]].entrance and \
-                                    path_candidate.loc[m][1] == \
-                                    self.Map[self.Task[j].start].entrance:
-                                x = Path()
-                                x.start_node = path_candidate.loc[m][0]
-                                x.end_node = path_candidate.loc[m][1]
-                                x.Paths = path_candidate.loc[m][2]
-                                x.path_time = path_candidate.loc[m][3]
-                                if 0 < j <= i:
-                                    x.path_time = [1000] * candidate_num
-                                x.static_congestion = path_candidate.loc[m][4]
-                                qf_i_j_v[i, j, v] = x
-                                break
+                        p = self.Map[task_f_end[i, v]].entrance
+                    q = self.Map[self.Task[j].start].entrance
+                    for m in range(len(path_candidate)):
+                        if path_candidate.loc[m][0] == p and path_candidate.loc[m][1] == q:
+                            x = Path()
+                            x.start_node = path_candidate.loc[m][0]
+                            x.end_node = path_candidate.loc[m][1]
+                            x.Paths = path_candidate.loc[m][2]
+                            x.path_time = path_candidate.loc[m][3]
+                            if 0 < j <= i:
+                                x.path_time = [1000] * candidate_num
+                            x.static_congestion = path_candidate.loc[m][4]
+                            qf_i_j_v[i, j, v] = x
+                            break
 
         # 中转库任务i接任务j对应叉车v的路径集更新
         for v in V_s:
@@ -1027,20 +991,15 @@ class Problem:
 
         model.setParam('OutputFlag', 0)
         model.optimize()
-        # print("-----optimal object value-----")
-        # print(model.ObjVal)
-        # print("-----decision variable value-----")
         solution = []
         if model.status == GRB.Status.INFEASIBLE:
             print('Optimization was stopped with status %d' % model.status)
-            # do IIS, find infeasible constraints
             model.computeIIS()
             for c in model.getConstrs():
                 if c.IISConstr:
                     print('%s' % c.constrName)
         for v in model.getVars():
-            # print('%s %g' % (v.varName, v.x))
-            m = [v.varName, v.x]
+            m = [v.varName, round(v.x)]
             solution.append(m)
         gurobi_solution = pd.DataFrame(solution, columns=("variable", "value"))
         gurobi_solution.to_csv(r"solution\{}_gurobi_solution.csv".format(time), index=False)
@@ -1097,10 +1056,14 @@ class Problem:
                 m = []
                 # 放货点到放货点出口
                 if self.Task[task_dict[v][i - 1]].end != self.Map[self.Task[task_dict[v][i - 1]].end].entrance:
-                    m += stock_entrance_path[self.Task[task_dict[v][i - 1]].end, self.Map[self.Task[task_dict[v][i - 1]].end].entrance]
+                    m += stock_entrance_path[
+                        self.Task[task_dict[v][i - 1]].end, self.Map[self.Task[task_dict[v][i - 1]].end].entrance]
                     # 放货点出口到取货点出口
                     for q in Q_f:
-                        if int(gurobi_solution[gurobi_solution["variable"] == "yf_{}_{}_{}_{}".format(task_dict[v][i - 1], task_dict[v][i], v, q)]["value"]) == 1:
+                        if int(gurobi_solution[
+                                   gurobi_solution["variable"] == "yf_{}_{}_{}_{}".format(task_dict[v][i - 1],
+                                                                                          task_dict[v][i], v, q)][
+                                   "value"]) == 1:
                             m += qf_i_j_v[task_dict[v][i - 1], task_dict[v][i], v].Paths[q][1:]
                 else:
                     # 放货点出口到取货点出口
@@ -1112,10 +1075,12 @@ class Problem:
                             m += qf_i_j_v[task_dict[v][i - 1], task_dict[v][i], v].Paths[q]
                 # 取货点出口到取货点
                 if self.Map[self.Task[task_dict[v][i]].start].entrance != self.Task[task_dict[v][i]].start:
-                    m += stock_entrance_path[self.Map[self.Task[task_dict[v][i]].start].entrance, self.Task[task_dict[v][i]].start][1:]
+                    m += stock_entrance_path[
+                             self.Map[self.Task[task_dict[v][i]].start].entrance, self.Task[task_dict[v][i]].start][1:]
                 # 取货点到取货点出口
                 if self.Task[task_dict[v][i]].start != self.Map[self.Task[task_dict[v][i]].start].entrance:
-                    m += stock_entrance_path[self.Task[task_dict[v][i]].start, self.Map[self.Task[task_dict[v][i]].start].entrance][1:]
+                    m += stock_entrance_path[
+                             self.Task[task_dict[v][i]].start, self.Map[self.Task[task_dict[v][i]].start].entrance][1:]
                 # 取货点出口到放货点出口
                 if len(task_route[task_dict[v][i]]) > 1:
                     m += task_route[task_dict[v][i]][1:]
@@ -1129,7 +1094,8 @@ class Problem:
                         m += [self.Map[candidate_area[v][i - 1]].entrance]
                 # 放货点出口到放货点
                 if self.Map[self.Task[task_dict[v][i]].end].entrance != self.Task[task_dict[v][i]].end:
-                    m += stock_entrance_path[self.Map[self.Task[task_dict[v][i]].end].entrance, self.Task[task_dict[v][i]].end][1:]
+                    m += stock_entrance_path[
+                             self.Map[self.Task[task_dict[v][i]].end].entrance, self.Task[task_dict[v][i]].end][1:]
                 self.Task[task_dict[v][i]].route_seq = m
                 i += 1
                 if i >= len(task_dict[v]):
@@ -1141,10 +1107,14 @@ class Problem:
                 m = []
                 # 放货点到放货点出口
                 if self.Task[task_dict[v][i - 1]].end != self.Map[self.Task[task_dict[v][i - 1]].end].entrance:
-                    m += stock_entrance_path[self.Task[task_dict[v][i - 1]].end, self.Map[self.Task[task_dict[v][i - 1]].end].entrance]
+                    m += stock_entrance_path[
+                        self.Task[task_dict[v][i - 1]].end, self.Map[self.Task[task_dict[v][i - 1]].end].entrance]
                     # 放货点出口到取货点出口
                     for q in Q_s:
-                        if int(gurobi_solution[gurobi_solution["variable"] == "ys_{}_{}_{}_{}".format(task_dict[v][i - 1], task_dict[v][i], v, q)]["value"]) == 1:
+                        if int(gurobi_solution[
+                                   gurobi_solution["variable"] == "ys_{}_{}_{}_{}".format(task_dict[v][i - 1],
+                                                                                          task_dict[v][i], v, q)][
+                                   "value"]) == 1:
                             m += qs_i_j_v[task_dict[v][i - 1], task_dict[v][i], v].Paths[q][1:]
                 else:
                     # 放货点出口到取货点出口
@@ -1156,16 +1126,19 @@ class Problem:
                             m += qs_i_j_v[task_dict[v][i - 1], task_dict[v][i], v].Paths[q]
                 # 取货点出口到取货点
                 if self.Map[self.Task[task_dict[v][i]].start].entrance != self.Task[task_dict[v][i]].start:
-                    m += stock_entrance_path[self.Map[self.Task[task_dict[v][i]].start].entrance, self.Task[task_dict[v][i]].start][1:]
+                    m += stock_entrance_path[
+                             self.Map[self.Task[task_dict[v][i]].start].entrance, self.Task[task_dict[v][i]].start][1:]
                 # 取货点到取货点出口
                 if self.Task[task_dict[v][i]].start != self.Map[self.Task[task_dict[v][i]].start].entrance:
-                    m += stock_entrance_path[self.Task[task_dict[v][i]].start, self.Map[self.Task[task_dict[v][i]].start].entrance][1:]
+                    m += stock_entrance_path[
+                             self.Task[task_dict[v][i]].start, self.Map[self.Task[task_dict[v][i]].start].entrance][1:]
                 # 取货点出口到放货点出口
                 if len(task_route[task_dict[v][i]]) > 1:
                     m += task_route[task_dict[v][i]][1:]
                 # 放货点出口到放货点
                 if self.Map[self.Task[task_dict[v][i]].end].entrance != self.Task[task_dict[v][i]].end:
-                    m += stock_entrance_path[self.Map[self.Task[task_dict[v][i]].end].entrance, self.Task[task_dict[v][i]].end][1:]
+                    m += stock_entrance_path[
+                             self.Map[self.Task[task_dict[v][i]].end].entrance, self.Task[task_dict[v][i]].end][1:]
                 self.Task[task_dict[v][i]].route_seq = m
                 i += 1
                 if i >= len(task_dict[v]):
@@ -1188,13 +1161,13 @@ class Problem:
         no_task_vehicle = []
         if len(V_f) < 4:
             for v in vehicle_flow:
-                if len(candidate_area[v]) == 0:
+                if v not in V_f:
                     full_vehicle.extend([v])
             for v in full_vehicle:
                 task_dict[v] = self.AGV[v].tasklist
         if len(V_s) < 4:
             for v in vehicle_stock:
-                if len(task_s_i[v - 4]) == 0:
+                if v not in V_s:
                     no_task_vehicle.extend([v])
             for v in no_task_vehicle:
                 task_dict[v] = self.AGV[v].tasklist

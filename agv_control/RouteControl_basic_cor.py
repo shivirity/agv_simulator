@@ -77,7 +77,7 @@ class RouteController_basic_cor:
         assert isinstance(routes, dict)
         routes = copy.deepcopy(routes)
         for key, route in routes.items():
-            self.residual_routes[key] = route  # update剩余路径
+            self.residual_routes[key] = route[1:]  # update剩余路径
         self._init_hash_route()  # update hash_route
         self.update_route_free = True
         logger.debug(f'hash_route updated.')
