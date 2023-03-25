@@ -125,6 +125,7 @@ class Problem:
     alpha = 0.001  # 一类误差产生的概率
     beta = 0.001  # 二类误差产生的概率
     cargo_time = 5  # 取、卸货的时间步长
+    side_penalty = 5  # 边缘冲突惩罚时间步长
 
     def __init__(self, dict_map, dict_task, dict_agv, dict_task_order, scheduling_property, cycle_time, size):
         self.Map = dict_map
@@ -153,6 +154,15 @@ class Problem:
 
         # route_controller
         self.controller = None
+
+    @ property
+    def loc_error_count(self):
+        return self.loc_error
+
+    @ property
+    def side_error_count(self):
+        avg_error_times = 6
+        return round(self.side_error / avg_error_times)
 
     # 更新任务字典，加入在线任务
     def renew_task_online(self, dict_task_simultaneous):

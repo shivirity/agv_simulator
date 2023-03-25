@@ -33,10 +33,10 @@ sh.setFormatter(stream_fmt)
 logger.addHandler(sh)
 sh.close()
 
-log_print_freq = 3000  # (set None to avoid printing log)
+log_print_freq = 1  # (set None to avoid printing log)
 
-planner_choose = 'new'  # 'new' or 'baseline'
-controller = RouteController
+planner_choose = 'baseline'  # 'new' or 'baseline'
+controller = RouteController_basic
 
 # new route_scheduling parameters
 candidate_path_num = 5
@@ -100,7 +100,7 @@ if __name__ == '__main__':
     else:
         end = time.time()
         logger.info('time span = {:.2f}s'.format(end-start))
-        logger.info(f'operation time = {problem.time}s')
+        logger.info(f'operation time = {problem.time + problem.side_penalty * problem.side_error_count}s')
         logger.info(
             f'task end time = '
             f'{[(problem.AGV[i].end_state[0] if problem.AGV[i].end_state[0] > 0 else problem.time) for i in range(1, 9)]} in seconds')
@@ -111,5 +111,5 @@ if __name__ == '__main__':
             f'avg agv wait time = '
             f'{int(sum([problem.AGV[i].waiting_time for i in range(1, 9)])/8)} in seconds')
         logger.info(f'deadlock times = {problem.deadlock_times}')
-        logger.info(f'loc collision times = {problem.loc_error}')
-        logger.info(f'side collision times = {problem.side_error}')
+        logger.info(f'loc collision times = {problem.loc_error_count}')
+        logger.info(f'side collision times = {problem.side_error_count}')

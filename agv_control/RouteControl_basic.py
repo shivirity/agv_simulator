@@ -1,6 +1,7 @@
 import copy
 import colorlog
 import logging
+import random
 
 # set logger
 log_colors_config = {
@@ -66,6 +67,9 @@ class RouteController_basic:
 
         # 初始化
         self._init_hash_route()
+
+        # random
+        self.forward_access_prob = 0.002
 
     @property
     def exist_prior(self) -> list:
@@ -183,20 +187,20 @@ class RouteController_basic:
             else:
                 # grid -> safe
                 if last_locs[agv] not in self.safe_grids[agv] and loc_list[agv] in self.safe_grids[agv]:
-                    assert self.wait_coll[agv] == 0
+                    assert self.wait_coll[agv] == 0, f'{agv}'
                     self.wait_coll[agv] += self.wait
                     assert agv not in self.exist_prior
                 # grid -> grid
                 elif last_locs[agv] not in self.safe_grids[agv] and loc_list[agv] not in self.safe_grids[agv]:
-                    assert self.hash_prior[loc_list[agv]][0] == agv
+                    assert self.hash_prior[loc_list[agv]][0] == agv, f'{agv}'
                     self.hash_prior[loc_list[agv]].pop(0)
                 # safe -> grid
                 elif last_locs[agv] in self.safe_grids[agv] and loc_list[agv] not in self.safe_grids[agv]:
-                    assert self.hash_prior[loc_list[agv]][0] == agv
+                    assert self.hash_prior[loc_list[agv]][0] == agv, f'{agv}'
                     self.hash_prior[loc_list[agv]].pop(0)
                 # safe -> safe
                 else:
-                    assert last_locs[agv] in self.safe_grids[agv] and loc_list[agv] in self.safe_grids[agv]
+                    assert last_locs[agv] in self.safe_grids[agv] and loc_list[agv] in self.safe_grids[agv], f'{agv}'
 
         control_list = []  # 控制指令列表
         for agv in range(self.num_of_agv):
@@ -222,7 +226,8 @@ class RouteController_basic:
                             self.reservation[loc_list[agv]] = -1
                             control_list.append(True)
                     else:
-                        if self.hash_prior[next_step][0] == agv and self.reservation[next_step] < 0:
+                        if self.hash_prior[next_step][0] == agv and \
+                                (self.reservation[next_step] < 0 or random.random() < self.forward_access_prob):
                             self.reservation[next_step] = agv
                             self.reservation[loc_list[agv]] = -1
                             control_list.append(True)
