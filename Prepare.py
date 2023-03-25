@@ -126,6 +126,7 @@ class Problem:
     beta = 0.001  # 二类误差产生的概率
     cargo_time = 5  # 取、卸货的时间步长
     side_penalty = 5  # 边缘冲突惩罚时间步长
+    deadlock_handle = 60  # 死锁解决时间步长
 
     def __init__(self, dict_map, dict_task, dict_agv, dict_task_order, scheduling_property, cycle_time, size):
         self.Map = dict_map
@@ -260,13 +261,13 @@ class Problem:
                 if len(have_circle[i]) == 1:
                     continue
                 self.deadlock_times += 1
-                logger.error(f'deadlock occurs between {have_circle}')
                 list_deadlock = [x.index(node) for node in have_circle[i]]
+                logger.error(f'deadlock occurs between {list_deadlock}')
                 self.deadlock[self.deadlock_times] = list_deadlock
                 # self.deadlock_num.append(self.deadlock_times)
                 # 强制车辆前进至下一位置，并停留n（两）步，模拟死锁处理时间
                 for j in list_deadlock:
-                    self.move_status[i] += 2
+                    self.move_status[i] += self.deadlock_handle
                     self.AGV[j+1].last_loc = self.AGV[j+1].location
                     self.AGV[j+1].location = self.AGV[j+1].next_loc
                     self.AGV[j+1].route.pop(0)
@@ -624,7 +625,7 @@ class Problem:
 
         # 如果发生死锁，在deadlock_check中已解决，需要更新路径
         if self.deadlock_happen:
-            self.controller.update_routes(routes={i: self.AGV[i+1].route[2:] for i in range(8)})
+            self.controller.update_routes(routes={i: self.AGV[i+1].route[1:] for i in range(8)})
 
         if not self.time:
             self.instruction = self.controller.get_instruction(

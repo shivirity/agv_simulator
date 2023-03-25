@@ -94,8 +94,6 @@ if __name__ == '__main__':
         problem.run_step()
         if problem.time % int(log_print_freq) == 0 and log_print_freq is not None:
             logger.info(f'time={problem.time}, cur_agv_loc={problem.get_agv_location()}')
-        if problem.time == 230:
-            logger.debug('here')
 
     else:
         end = time.time()
