@@ -1,15 +1,15 @@
 import pandas as pd
-from Prepare import AGV, Task
+from Prepare import AGV, Task, dataset_choose
 from numpy import random
 import numpy as np
 
 # 统一读入配置文件
-df_task_offline = pd.read_csv("config/OfflineTask.csv")
-df_task_online = pd.read_csv("config/OnlineTask.csv")
-df_task_online_order = pd.read_csv("config/OnlineTaskOrder.csv")
+df_task_offline = pd.read_csv(f"config/task_{dataset_choose}/OfflineTask.csv")
+df_task_online = pd.read_csv(f"config/task_{dataset_choose}/OnlineTask.csv")
+df_task_online_order = pd.read_csv(f"config/task_{dataset_choose}/OnlineTaskOrder.csv")
 
 # 标记叉车初始位置
-df_loc = pd.read_csv("config/Car.csv")
+df_loc = pd.read_csv(f"config/task_{dataset_choose}/Car.csv")
 init_loc = df_loc['park'].tolist()
 # init_loc = [364, 362, 360, 354, 66, 57, 135, 140]  # 叉车初始坐标
 
@@ -17,8 +17,6 @@ init_loc = df_loc['park'].tolist()
 def sp_exponential(t, size):
     r = random.exponential(t, size)
     return np.cumsum(r)
-
-# print(scheduling('exponential', 216, 10))
 
 
 # 创建任务字典

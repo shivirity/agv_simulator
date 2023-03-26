@@ -2,7 +2,7 @@ import time
 import logging
 import colorlog
 
-from Prepare import Problem
+from Prepare import dataset_choose, Problem
 from initialize import dictionary_task, dictionary_car, dictionary_task_online_ending_order
 from Map import dictionary_map
 
@@ -34,23 +34,25 @@ logger.addHandler(sh)
 sh.close()
 
 log_print_freq = 1  # (set None to avoid printing log)
-
 planner_choose = 'baseline'  # 'new' or 'baseline'
-controller = RouteController_basic
+controller_choose = RouteController_basic
 
 # new route_scheduling parameters
 candidate_path_num = 5
 max_agv_task_num = 2
 
+# size parameter
+size_dict = {i: [int(i/2), int(i/2)] for i in [80, 120, 160, 200]}
+size_dict[8080], size_dict[2333] = [0, 100], [100, 0]
+
 if __name__ == '__main__':
 
     # 数据读入
-
     problem = Problem(dictionary_map, dictionary_task, dictionary_car,
-                      dictionary_task_online_ending_order, 'uniform', 216, 50)
+                      dictionary_task_online_ending_order, 'uniform', 216, size_dict.get(dataset_choose, -1))
 
     first_in = True
-    route_planner = Routeplanner_basic(grids=problem.Map)
+    route_planner = Routeplanner_basic(grids=problem.Map, size=size_dict[dataset_choose])
 
     start = time.time()
 
@@ -83,8 +85,9 @@ if __name__ == '__main__':
 
             # 初始化controller
             if first_in:
-                problem.controller = controller(
-                    routes={i: problem.AGV[i+1].route[2:] for i in range(8)}
+                problem.controller = controller_choose(
+                    routes={i: problem.AGV[i+1].route[2:] for i in range(8)},
+                    size=size_dict[dataset_choose]
                 )
                 first_in = False
             else:
@@ -94,11 +97,15 @@ if __name__ == '__main__':
         problem.run_step()
         if problem.time % int(log_print_freq) == 0 and log_print_freq is not None:
             logger.info(f'time={problem.time}, cur_agv_loc={problem.get_agv_location()}')
+        # logger.info(f'0: {problem.controller.shared_routes[0]}')
+        # logger.info(f'2: {problem.controller.shared_routes[2]}')
+        if problem.time == 2810:
+            logger.debug('')
 
     else:
         end = time.time()
         logger.info('time span = {:.2f}s'.format(end-start))
-        logger.info(f'operation time = {problem.time + problem.side_penalty * problem.side_error_count}s')
+        logger.info(f'operation time = {problem.time}s')
         logger.info(
             f'task end time = '
             f'{[(problem.AGV[i].end_state[0] if problem.AGV[i].end_state[0] > 0 else problem.time) for i in range(1, 9)]} in seconds')

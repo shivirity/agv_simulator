@@ -41,7 +41,7 @@ class RouteController_basic:
 
     wait = 0  # 等待side collision
 
-    def __init__(self, routes: dict):
+    def __init__(self, routes: dict, size: list):
         """
         初始化
 
@@ -51,6 +51,8 @@ class RouteController_basic:
         # 全局常量
         self.num_of_nodes = NUM_OF_NODES  # 节点数量
         self.num_of_agv = NUM_OF_AGVS  # agv数量
+        self.offline_task_num = size[0]
+        self.online_task_num = size[1]
 
         # 路径规划相关
         self.residual_routes = routes  # 车辆剩余路径, dict
@@ -69,7 +71,7 @@ class RouteController_basic:
         self._init_hash_route()
 
         # random
-        self.forward_access_prob = 0.002
+        self.forward_access_prob = 0.0018
 
     @property
     def exist_prior(self) -> list:

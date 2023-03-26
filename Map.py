@@ -1,8 +1,9 @@
 import pandas as pd
+from initialize import dataset_choose
 
 # 统一读入配置文件
-df_Grid = pd.read_csv("config/Map.csv")
-df_Inventory = pd.read_csv("config/Inventory.csv")
+df_Grid = pd.read_csv(f"config//task_{dataset_choose}/Map.csv")
+df_Inventory = pd.read_csv(f"config//task_{dataset_choose}/Inventory.csv")
 
 
 # 节点类的形式储存地图数据
@@ -40,6 +41,3 @@ def create_map(df_grid, df_inventory):
 
 
 dictionary_map = create_map(df_Grid, df_Inventory)
-
-# print(dictionary_map[1].conflict)
-# print(dictionary_map[1].state)

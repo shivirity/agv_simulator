@@ -37,7 +37,7 @@ class RouteController:
         7: list(range(697, 829)) + [138, 139, 140] + list(range(383, 413)) + list(range(437, 517)),
     }
 
-    def __init__(self, routes: dict):
+    def __init__(self, routes: dict, size: list):
         """
         初始化
 
@@ -47,6 +47,8 @@ class RouteController:
         # 全局常量
         self.num_of_nodes = NUM_OF_NODES  # 节点数量
         self.num_of_agv = NUM_OF_AGVS  # agv数量
+        self.offline_task_num = size[0]
+        self.online_task_num = size[1]
 
         # 路径规划相关
         self.residual_routes = routes  # 车辆剩余路径, dict
@@ -67,7 +69,8 @@ class RouteController:
         self._init_shared_routes()
 
         # 随机因素
-        self.online_first_rate = 1
+        self.online_first_rate = 0.5
+        self.forward_access_prob = 0.05
 
     @staticmethod
     def _is_list_contained(lists, listl):
@@ -221,7 +224,7 @@ class RouteController:
 
         control_list = []  # 控制指令列表
         # 对比潜在路径，更新权限申请情况
-        online_first_flag = True if len(undo_offline_tasks) > (1 - self.online_first_rate) * 100 else False
+        online_first_flag = True if len(undo_offline_tasks) > (1 - self.online_first_rate) * self.offline_task_num else False
         # agv_order = list(range(self.num_of_agv)) if online_first_flag else [4, 5, 6, 7, 0, 1, 2, 3]
         agv_order = [0, 1, 2, 3, 5, 6, 4, 7] if online_first_flag else [5, 6, 4, 7, 0, 1, 2, 3]
         for agv in agv_order:

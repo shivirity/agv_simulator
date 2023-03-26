@@ -1,12 +1,10 @@
 import random
 import numpy as np
 import pandas as pd
-import logging
 import colorlog
 
 from ast import literal_eval
 from gurobipy import *
-
 
 # set logger
 log_colors_config = {
@@ -29,6 +27,7 @@ sh.close()
 
 random.seed(42)
 
+dataset_choose = 200
 
 def sp_uniform(t, size):
     """生成在线任务到达时间，从0开始"""
@@ -45,17 +44,11 @@ def scheduling(scheduling_property, cycle_time, size):
     return online_list_352, online_list_356
 
 
-# 标记叉车初始位置
-df_loc = pd.read_csv("config/Car.csv")
-init_loc = df_loc['park'].tolist()
-# init_loc = [364, 362, 360, 354, 66, 57, 135, 140]  # 叉车初始坐标
-
-
 # 有向图成环搜索函数
 def dfs(graph, n_i, color, circle_list, have_circle, circle):
     r = len(graph)
     color[n_i] = -1
-    for j in range(r):	 # 遍历当前节点i的所有邻居节点
+    for j in range(r):  # 遍历当前节点i的所有邻居节点
         if graph[n_i][j] != 0:
             if color[j] == -1:
                 have_circle += 1
@@ -76,7 +69,7 @@ def findcircle(graph) -> list:
     color = [0] * r
     have_circle = 0
     circle = []
-    for i in range(r):	 # 遍历所有的节点
+    for i in range(r):  # 遍历所有的节点
         circle_list = []
         if color[i] == 0:
             circle_list.append(i)
@@ -127,8 +120,12 @@ class Problem:
     cargo_time = 5  # 取、卸货的时间步长
     side_penalty = 5  # 边缘冲突惩罚时间步长
     deadlock_handle = 60  # 死锁解决时间步长
+    type_1_wait = 1  # 类型1误差
+    type_2_wait = 10  # 类型2误差
 
-    def __init__(self, dict_map, dict_task, dict_agv, dict_task_order, scheduling_property, cycle_time, size):
+    def __init__(
+            self, dict_map: dict, dict_task: dict, dict_agv: dict, dict_task_order: dict,
+            scheduling_property: str, cycle_time: int, size: list):
         self.Map = dict_map
         self.Task = dict_task  # 储存任务信息，包括任务状态
         self.AGV = dict_agv  # 储存各AGV的实时位置信息
@@ -144,23 +141,24 @@ class Problem:
         # moving_success: 叉车实际的行进状态，成功前进则为True, 原地停留则为False单步更新，可能会因为误差导致与规划不一致
         self.moving_success = [True, True, True, True, True, True, True, True]
         self.instruction = [True, True, True, True, True, True, True, True]  # 用于储存控制策略函数的返回值
-        self.online_task_arrival_352, self.online_task_arrival_356 = scheduling(scheduling_property, cycle_time, size)
+        self.online_task_arrival_352, self.online_task_arrival_356 = \
+            scheduling(scheduling_property, cycle_time, int(size[1]/2))
         self.time = 0  # 系统全局时间步
         self.is_finished = False  # 判定仿真过程是否完成
         self.online_task_arrival = False  # 判断是否有任务到达
         self.next_locs = []  # 用于暂存车辆下一步的位置
-        # self.not_assigned_task_buffer = []  # 用于储存待规划的任务编号，调用函数才会更新
-        # self.not_performed_task_buffer = []  # 用于储存待执行的离线任务编号，调用函数才会更新
-        self.deadlock_happen = False
+        self.offline_task_num = size[0]  # 离线任务数量
+        self.online_task_num = size[1]  # 在线任务数量
+        self.deadlock_happen = False  # 死锁状态指示
 
         # route_controller
         self.controller = None
 
-    @ property
+    @property
     def loc_error_count(self):
         return self.loc_error
 
-    @ property
+    @property
     def side_error_count(self):
         avg_error_times = 6
         return round(self.side_error / avg_error_times)
@@ -193,8 +191,8 @@ class Problem:
     # 碰撞判断
     def collision_check(self):
         self.next_locs = None
-        agvs_list = [self.AGV[i+1].next_loc if self.instruction[i] is True and self.move_status[i] == 0
-                     else self.AGV[i+1].location
+        agvs_list = [self.AGV[i + 1].next_loc if self.instruction[i] is True and self.move_status[i] == 0
+                     else self.AGV[i + 1].location
                      for i in range(len(self.AGV))]
         agvs_set = set(agvs_list)
         # location collision
@@ -202,8 +200,8 @@ class Problem:
             self.loc_error += len(self.AGV) - len(agvs_set)
             self.next_locs = list(agvs_list)
         # near collision
-        for i in range(len(self.AGV)-1):
-            for j in range(i+1, len(self.AGV)):
+        for i in range(len(self.AGV) - 1):
+            for j in range(i + 1, len(self.AGV)):
                 if agvs_list[j] in self.Map[agvs_list[i]].conflict:
                     self.side_error += 1
                     self.next_locs = list(agvs_list)
@@ -229,8 +227,8 @@ class Problem:
         agvs_list_before = []
         agvs_list_after = []
         for i in range(len(self.AGV)):
-            agvs_list_after.append(self.AGV[i+1].next_loc)
-            agvs_list_before.append(self.AGV[i+1].location)
+            agvs_list_after.append(self.AGV[i + 1].next_loc)
+            agvs_list_before.append(self.AGV[i + 1].location)
         nodes = []
         x = []
         y = []
@@ -268,62 +266,51 @@ class Problem:
                 # 强制车辆前进至下一位置，并停留n（两）步，模拟死锁处理时间
                 for j in list_deadlock:
                     self.move_status[i] += self.deadlock_handle
-                    self.AGV[j+1].last_loc = self.AGV[j+1].location
-                    self.AGV[j+1].location = self.AGV[j+1].next_loc
-                    self.AGV[j+1].route.pop(0)
-                    if len(self.AGV[j+1].route) >= 3:
-                        self.AGV[j+1].next_loc = self.AGV[j+1].route[2]
+                    self.AGV[j + 1].last_loc = self.AGV[j + 1].location
+                    self.AGV[j + 1].location = self.AGV[j + 1].next_loc
+                    self.AGV[j + 1].route.pop(0)
+                    if len(self.AGV[j + 1].route) >= 3:
+                        self.AGV[j + 1].next_loc = self.AGV[j + 1].route[2]
                     else:
-                        self.AGV[j+1].next_loc = self.AGV[j+1].location
-
-    '''
-    # 仿真器死锁解决策略，强制改变控制路径的下发使得系统达到一个人工搬运后得以畅通的状态
-    def deadlock_solving(self):
-        if self.deadlock_happen:
-            for i in self.deadlock_num:
-                for j in self.deadlock[i]:
-                    self.instruction[j] = True
-            self.deadlock_happen = False
-            self.deadlock_num = []
-            '''
+                        self.AGV[j + 1].next_loc = self.AGV[j + 1].location
 
     # 误差生成
     def error_generating(self):
         # Type 1: low battery
         for i in range(len(self.AGV)):
-            if random.random() < self.alpha and self.move_status[i] == 0 and self.AGV[i+1].status == 'busy':
-                logger.warning(f'[LOW BATTERY]: agv{i+1} at time {self.time}.')
-                self.move_status[i] += 1
-                self.AGV[i+1].status = 'stop_low_battery'
+            if random.random() < self.alpha and self.move_status[i] == 0 and self.AGV[i + 1].status == 'busy':
+                logger.warning(f'[LOW BATTERY]: agv{i + 1} at time {self.time}.')
+                self.move_status[i] += self.type_1_wait
+                self.AGV[i + 1].status = 'stop_low_battery'
 
         # Type 2: blocked or broken
         for i in range(len(self.AGV)):
-            if random.random() < self.beta and self.AGV[i+1].status == 'busy':
-                logger.warning(f'[BLOCKED or BROKEN]: agv{i+1} at time {self.time}.')
-                self.move_status[i] += 10
-                self.AGV[i+1].status = 'down'
+            if random.random() < self.beta and self.AGV[i + 1].status == 'busy':
+                logger.warning(f'[BLOCKED or BROKEN]: agv{i + 1} at time {self.time}.')
+                self.move_status[i] += self.type_2_wait
+                self.AGV[i + 1].status = 'down'
 
     # 叉车前进
     def agvs_move(self, instruction):
         """控制车辆移动"""
         for i in range(len(self.AGV)):
-            if instruction[i] and self.move_status[i] == 0:   # 如果指令为True，即为前进一步
+            if instruction[i] and self.move_status[i] == 0:  # 如果指令为True，即为前进一步
                 self.moving_success[i] = True
-                self.AGV[i+1].last_loc = self.AGV[i+1].location
-                self.AGV[i+1].location = self.AGV[i+1].next_loc
-                self.AGV[i+1].route.pop(0)
-                if len(self.AGV[i+1].route) >= 3:
-                    self.AGV[i+1].next_loc = self.AGV[i+1].route[2]
+                self.AGV[i + 1].last_loc = self.AGV[i + 1].location
+                self.AGV[i + 1].location = self.AGV[i + 1].next_loc
+                self.AGV[i + 1].route.pop(0)
+                if len(self.AGV[i + 1].route) >= 3:
+                    self.AGV[i + 1].next_loc = self.AGV[i + 1].route[2]
                 else:  # 进入停靠点
-                    assert self.AGV[i+1].location == self.AGV[i+1].park_loc
-                    assert len(self.AGV[i+1].route) == 2, f'{i+1, self.AGV[i+1].route}'
-                    assert not self.AGV[i+1].tasklist, f'{i+1}'
+                    assert self.AGV[i + 1].location == self.AGV[i + 1].park_loc
+                    assert len(self.AGV[i + 1].route) == 2, f'{i + 1, self.AGV[i + 1].route}'
+                    assert not self.AGV[i + 1].tasklist, f'{i + 1}'
 
             elif not instruction[i] and self.move_status[i] == 0:  # instruction[i] and self.move_status != 0:
-                if self.AGV[i+1].route:  # route为空则说明还没接到任务，控制器能判断出来
-                    if self.AGV[i+1].location != self.AGV[i+1].park_loc:
-                        self.AGV[i+1].status = 'waiting'  # 该前进但需要等待
-                        self.AGV[i+1].waiting_time += self.step
+                if self.AGV[i + 1].route:  # route为空则说明还没接到任务，控制器能判断出来
+                    if self.AGV[i + 1].location != self.AGV[i + 1].park_loc:
+                        self.AGV[i + 1].status = 'waiting'  # 该前进但需要等待
+                        self.AGV[i + 1].waiting_time += self.step
                 self.moving_success[i] = False
             else:  # 该前进但因误差导致无法前进 or 本就无法前进
                 self.moving_success[i] = False
@@ -334,69 +321,69 @@ class Problem:
         """控制车辆状态变更（走，停，转弯，...）"""
         for i in range(len(self.AGV)):
             # 取货结束
-            if self.AGV[i+1].status == 'get_arriving' and self.move_status[i] == 0:
+            if self.AGV[i + 1].status == 'get_arriving' and self.move_status[i] == 0:
                 assert self.AGV[i + 1].location == self.Task[self.AGV[i + 1].task].start
-                self.AGV[i+1].task_status = 'put'
+                self.AGV[i + 1].task_status = 'put'
                 # self.AGV[i+1].is_load = 1
-                if self.Map[self.Task[self.AGV[i+1].task].start].state is not None:
-                    self.Map[self.Task[self.AGV[i+1].task].start].state -= 1
+                if self.Map[self.Task[self.AGV[i + 1].task].start].state is not None:
+                    self.Map[self.Task[self.AGV[i + 1].task].start].state -= 1
             # 中途改变
-            if self.move_status[i] == 0 and self.AGV[i+1].status not in ('busy', 'idle', 'put_arriving', 'turning'):
-                if self.AGV[i+1].next_loc != self.AGV[i+1].location:
-                    if self.AGV[i+1].task < 0:  # on return
+            if self.move_status[i] == 0 and self.AGV[i + 1].status not in ('busy', 'idle', 'put_arriving', 'turning'):
+                if self.AGV[i + 1].next_loc != self.AGV[i + 1].location:
+                    if self.AGV[i + 1].task < 0:  # on return
                         self.AGV[i + 1].status = 'idle'
                     else:
                         self.AGV[i + 1].status = 'busy'
                 else:
-                    self.AGV[i+1].status = 'idle'
+                    self.AGV[i + 1].status = 'idle'
             # 卸货结束
-            if self.AGV[i+1].status == 'put_arriving' and self.move_status[i] == 0:
-                assert self.AGV[i+1].location == self.Task[self.AGV[i+1].task].end
+            if self.AGV[i + 1].status == 'put_arriving' and self.move_status[i] == 0:
+                assert self.AGV[i + 1].location == self.Task[self.AGV[i + 1].task].end
                 # self.AGV[i+1].is_load = 0
-                self.Map[self.Task[self.AGV[i+1].task].end].state += 1
-                self.Task[self.AGV[i+1].task].state = 3  # 代表当前任务完成
-                self.AGV[i+1].tasklist.pop(0)
-                self.AGV[i+1].task = self.AGV[i+1].tasklist[0]
-                if len(self.AGV[i+1].tasklist) == 1:
-                    self.AGV[i+1].status = 'idle'
-                    self.AGV[i+1].task_status = 'return'
+                self.Map[self.Task[self.AGV[i + 1].task].end].state += 1
+                self.Task[self.AGV[i + 1].task].state = 3  # 代表当前任务完成
+                self.AGV[i + 1].tasklist.pop(0)
+                self.AGV[i + 1].task = self.AGV[i + 1].tasklist[0]
+                if len(self.AGV[i + 1].tasklist) == 1:
+                    self.AGV[i + 1].status = 'idle'
+                    self.AGV[i + 1].task_status = 'return'
                 else:
                     # 叉车从上一个任务的卸货点出发执行任务
-                    self.Map[self.Task[self.AGV[i+1].task].start].reservation = True
-                    self.Map[self.Task[self.AGV[i+1].task].end].reservation = True
-                    self.Task[self.AGV[i+1].task].state = 2
+                    self.Map[self.Task[self.AGV[i + 1].task].start].reservation = True
+                    self.Map[self.Task[self.AGV[i + 1].task].end].reservation = True
+                    self.Task[self.AGV[i + 1].task].state = 2
                     # 在线任务开始执行后将终点序列更新
-                    if i <= 3 and self.Task[self.AGV[i+1].task].end == self.Task_order[i+1][0]:
-                        self.Task_order[i+1].pop(0)
-                    self.AGV[i+1].task_status = 'get'
-                    self.AGV[i+1].status = 'busy'
+                    if i <= 3 and self.Task[self.AGV[i + 1].task].end == self.Task_order[i + 1][0]:
+                        self.Task_order[i + 1].pop(0)
+                    self.AGV[i + 1].task_status = 'get'
+                    self.AGV[i + 1].status = 'busy'
 
     # 返回所有AGV的实时任务执行状态
     def get_agv_status(self):
         status_list = []
         for i in range(len(self.AGV)):
-            status_list.append(self.AGV[i+1].status)
+            status_list.append(self.AGV[i + 1].status)
         return status_list
 
     # 返回所有AGV的实时任务执行状态
     def get_agv_task_status(self):
         task_status_list = []
         for i in range(len(self.AGV)):
-            task_status_list.append(self.AGV[i+1].task_status)
+            task_status_list.append(self.AGV[i + 1].task_status)
         return task_status_list
 
     # 返回所有AGV的实时位置
     def get_agv_location(self):
         location_list = []
         for i in range(len(self.AGV)):
-            location_list.append(self.AGV[i+1].location)
+            location_list.append(self.AGV[i + 1].location)
         return location_list
 
     # 返回所有AGV的实时任务编号
     def get_agv_task(self):
         simultaneous_task_list = []
         for i in range(len(self.AGV)):
-            simultaneous_task_list.append(self.AGV[i+1].task)
+            simultaneous_task_list.append(self.AGV[i + 1].task)
         return simultaneous_task_list
 
     # 返回所有AGV的实时任务列表
@@ -424,7 +411,7 @@ class Problem:
 
     # 返回未完成的离线任务编号
     def get_undo_offline_task(self):
-        return [i for i in self.Task.keys() if 0 < i < 101 and self.Task[i].state != 3]
+        return [i for i in self.Task.keys() if 0 < i < self.offline_task_num+1 and self.Task[i].state != 3]
 
     # 返回货位情况
     def get_cargo_state(self):
@@ -432,7 +419,7 @@ class Problem:
 
         cargo_occupied = []
         grid_reserved = []
-        for i in range(1, len(self.Map)+1):
+        for i in range(1, len(self.Map) + 1):
             # todo 返回被占用的库存节点编号，如果需返回货物数量，另写
             if self.Map[i].state >= 1:
                 cargo_occupied.append(i)
@@ -443,74 +430,82 @@ class Problem:
     # 车辆到达并取卸货的判断
     def arriving_identify(self):
         for i in range(len(self.AGV)):
-            if self.AGV[i+1].task:
-                task_now = self.Task[self.AGV[i+1].task]
+            if self.AGV[i + 1].task:
+                task_now = self.Task[self.AGV[i + 1].task]
                 # 开始取货
-                if self.AGV[i+1].location == task_now.start and self.AGV[i+1].is_load == 0 and \
-                        self.AGV[i+1].status != 'get_arriving':
-                    self.AGV[i+1].status = 'get_arriving'
-                    self.AGV[i+1].is_load = 1  # 用于到达后的起步判断了
-                    self.Map[self.Task[self.AGV[i+1].task].start].reservation = False
+                if self.AGV[i + 1].location == task_now.start and self.AGV[i + 1].is_load == 0 and \
+                        self.AGV[i + 1].status != 'get_arriving':
+                    self.AGV[i + 1].status = 'get_arriving'
+                    self.AGV[i + 1].is_load = 1  # 用于到达后的起步判断了
+                    self.Map[self.Task[self.AGV[i + 1].task].start].reservation = False
                     self.move_status[i] += self.cargo_time  # 等待时间加上一个取、卸货的时间
                 # 开始卸货
-                elif self.AGV[i+1].location == task_now.end and self.AGV[i+1].is_load == 1 and \
-                        self.AGV[i+1].status != 'put_arriving':
-                    self.AGV[i+1].is_load = 0  # 用于到达后的起步判断了
-                    self.AGV[i+1].status = 'put_arriving'
-                    self.Map[self.Task[self.AGV[i+1].task].end].reservation = False
+                elif self.AGV[i + 1].location == task_now.end and self.AGV[i + 1].is_load == 1 and \
+                        self.AGV[i + 1].status != 'put_arriving':
+                    self.AGV[i + 1].is_load = 0  # 用于到达后的起步判断了
+                    self.AGV[i + 1].status = 'put_arriving'
+                    self.Map[self.Task[self.AGV[i + 1].task].end].reservation = False
                     # 完成当前任务, 将当前任务从列表中pop出，但task属性还是需要判断是否在执行return任务
                     # self.AGV[i+1].tasklist.pop(0)
                     self.move_status[i] += self.cargo_time  # 等待时间加上一个取、卸货的时间
                 # 车辆到达
-                elif self.AGV[i+1].next_loc == self.AGV[i+1].park_loc and len(self.AGV[i+1].tasklist) == 1:
+                elif self.AGV[i + 1].next_loc == self.AGV[i + 1].park_loc and len(self.AGV[i + 1].tasklist) == 1:
                     self.AGV[i + 1].tasklist = []
                     self.AGV[i + 1].task = None
                     self.AGV[i + 1].task_status = None
             else:
                 # 车辆任务结束
-                if self.time > 10584 and self.AGV[i + 1].end_state[1] is False:
-                    self.AGV[i + 1].end_state = (self.time, True)
-            if self.AGV[i+1].location == self.AGV[i+1].park_loc and len(self.AGV[i+1].tasklist) > 1:
+                if i <= 3:  # 在线
+                    if not self.Task_order[i+1] and self.AGV[i + 1].end_state[1] is False:
+                        self.AGV[i + 1].end_state = (self.time, True)
+                else:
+                    if self.time > 2333 and self.AGV[i + 1].end_state[1] is False:
+                        self.AGV[i + 1].end_state = (self.time, True)
+            if self.AGV[i + 1].location == self.AGV[i + 1].park_loc and len(self.AGV[i + 1].tasklist) > 1:
                 # 叉车从停靠点出发执行任务
-                if self.AGV[i+1].task < 0:
-                    assert self.AGV[i+1].tasklist[0] < 0
-                    self.AGV[i+1].tasklist.pop(0)
-                    self.AGV[i+1].task = self.AGV[i+1].tasklist[0]
-                self.Task[self.AGV[i+1].task].state = 2
-                self.Map[self.Task[self.AGV[i+1].task].start].reservation = True
-                self.Map[self.Task[self.AGV[i+1].task].end].reservation = True
+                if self.AGV[i + 1].task < 0:
+                    assert self.AGV[i + 1].tasklist[0] < 0
+                    self.AGV[i + 1].tasklist.pop(0)
+                    self.AGV[i + 1].task = self.AGV[i + 1].tasklist[0]
+                self.Task[self.AGV[i + 1].task].state = 2
+                self.Map[self.Task[self.AGV[i + 1].task].start].reservation = True
+                self.Map[self.Task[self.AGV[i + 1].task].end].reservation = True
                 # 在线任务开始执行后将终点序列更新
-                if i <= 3 and self.Task_order[i+1]:
-                    if self.Task[self.AGV[i+1].task].end == self.Task_order[i+1][0]:
-                        self.Task_order[i+1].pop(0)
-                    self.AGV[i+1].status = 'busy'
-                    self.AGV[i+1].task_status = 'get'
+                if i <= 3 and self.Task_order[i + 1]:
+                    if self.Task[self.AGV[i + 1].task].end == self.Task_order[i + 1][0]:
+                        self.Task_order[i + 1].pop(0)
+                    self.AGV[i + 1].status = 'busy'
+                    self.AGV[i + 1].task_status = 'get'
 
     # 车辆转弯的判断
     def turning_identify(self):
         for i in range(len(self.AGV)):
-            if self.AGV[i+1].last_loc is not None:
-                l_x = self.Map[self.AGV[i+1].last_loc].x
-                l_y = self.Map[self.AGV[i+1].last_loc].y
-                n_x = self.Map[self.AGV[i+1].next_loc].x
-                n_y = self.Map[self.AGV[i+1].next_loc].y
-                if abs(l_x-n_x) > 0.6 and l_y != n_y and self.AGV[i+1].status != 'turning':
-                    self.AGV[i+1].status = 'turning'
+            if self.AGV[i + 1].last_loc is not None:
+                l_x = self.Map[self.AGV[i + 1].last_loc].x
+                l_y = self.Map[self.AGV[i + 1].last_loc].y
+                n_x = self.Map[self.AGV[i + 1].next_loc].x
+                n_y = self.Map[self.AGV[i + 1].next_loc].y
+                if abs(l_x - n_x) > 0.6 and l_y != n_y and self.AGV[i + 1].status != 'turning':
+                    self.AGV[i + 1].status = 'turning'
                     self.move_status[i] += 1
-                elif abs(l_x-n_x) > 0.6 and l_y != n_y and self.AGV[i+1].status == 'turning':
-                    if self.AGV[i+1].task < 0:
+                elif abs(l_x - n_x) > 0.6 and l_y != n_y and self.AGV[i + 1].status == 'turning':
+                    if self.AGV[i + 1].task < 0:
                         self.AGV[i + 1].status = 'idle'
                     else:
-                        self.AGV[i+1].status = 'busy'
+                        self.AGV[i + 1].status = 'busy'
 
     # 将任务及路径分配给叉车时，更新叉车属性：
     def update_car(self, task_dict):
-        for i in range(1, len(self.AGV)+1):
+        for i in range(1, len(self.AGV) + 1):
             '''
             # 判断此时是否在执行返回任务，若否，task和tasklist都空或都有
             if len(self.AGV[i].tasklist) == 1:  # 或self.AGV[i].task_status == ’return‘
                 self.AGV[i].task_status = 'get'
                 self.AGV[i].task = None
+            '''
+            '''
+            if self.time == 2808 and i == 2:
+                continue
             '''
             self.AGV[i].tasklist = list(task_dict[i])
             if self.AGV[i].tasklist:  # 判断列表不为空
@@ -534,14 +529,15 @@ class Problem:
                     cur_task = temp.pop(0)
                     if self.AGV[i].route.count(self.Task[cur_task].end) > 1:
                         if cur_task > 0:  # 非返回任务
-                            end_idx = [idx for idx in range(len(self.AGV[i].route)) if self.AGV[i].route[idx] == self.Task[cur_task].end]
+                            end_idx = [idx for idx in range(len(self.AGV[i].route)) if
+                                       self.AGV[i].route[idx] == self.Task[cur_task].end]
                             first_get_idx = self.AGV[i].route.index(self.Task[cur_task].start)
                             cur_end_idx = [i for i in end_idx if i > first_get_idx][0]
                         else:  # 返回任务在第一个停靠点
                             cur_end_idx = self.AGV[i].route.index(self.Task[cur_task].end)
                     else:
                         cur_end_idx = self.AGV[i].route.index(self.Task[cur_task].end)
-                    self.AGV[i].route = self.AGV[i].route[:cur_end_idx+1]  # delete undo task
+                    self.AGV[i].route = self.AGV[i].route[:cur_end_idx + 1]  # delete undo task
                     for j in temp:
                         tmp = list(self.Task[j].route_seq)
                         self.AGV[i].route += tmp[1:]
@@ -564,6 +560,8 @@ class Problem:
                     assert self.AGV[i].route[0] == self.AGV[i].last_loc
                     assert self.AGV[i].next_loc == self.AGV[i].location or \
                            self.AGV[i].next_loc == self.AGV[i].route[2]
+                    if self.AGV[i].next_loc == self.AGV[i].location and len(self.AGV[i].route) >= 3:
+                        self.AGV[i].next_loc = self.AGV[i].route[2]
                 else:
                     # update last_loc
                     if self.AGV[i].last_loc is None:  # 只在初始化时last_loc为None
@@ -582,7 +580,6 @@ class Problem:
 
     # 将路径赋予对应任务时，更新任务的路径序列：
     def update_task(self):
-        # todo 有记录的需要的话再写
         pass
 
     # 更新系统时间步长
@@ -598,7 +595,7 @@ class Problem:
             self.update_control_policy()
 
     def finish_identify(self):
-        if self.time <= 5400:
+        if self.time <= 2333:
             self.is_finished = False
         else:
             for task in [i for i in self.Task.keys() if i > 0]:
@@ -625,7 +622,7 @@ class Problem:
 
         # 如果发生死锁，在deadlock_check中已解决，需要更新路径
         if self.deadlock_happen:
-            self.controller.update_routes(routes={i: self.AGV[i+1].route[1:] for i in range(8)})
+            self.controller.update_routes(routes={i: self.AGV[i + 1].route[1:] for i in range(8)})
 
         if not self.time:
             self.instruction = self.controller.get_instruction(
@@ -642,12 +639,15 @@ class Problem:
             )
 
         for agv in range(8):
-            if len(self.AGV[agv+1].route) >= 3:
-                assert self.AGV[agv+1].route[2] == self.controller.residual_routes[agv][0], f'{agv}'
+            if len(self.AGV[agv + 1].route) >= 3:
+                assert self.AGV[agv + 1].route[2] == self.controller.residual_routes[agv][0], f'{agv}'
 
         # 下发控制路径 step_list 上一步到底有没有走成功，转弯不算走，移动
 
         self.error_generating()  # 误差生成
+
+        if self.time == 2808:
+            logger.debug('')
 
         # 冲突检测+策略修正
         self.fix_instruction()
@@ -667,12 +667,13 @@ class Problem:
             path_time = []  # 路径耗费时间（考虑转弯数量）
             Paths = [[]]  # 候选路径节点集
 
-        stock_path = pd.read_csv("config/stock_path.csv")
+        stock_path = pd.read_csv(f"config/task_{dataset_choose}/stock_path.csv")
         stock_entrance_path = {}
         for i in range(len(stock_path)):
             stock_entrance_path[stock_path.loc[i][0], stock_path.loc[i][1]] = stock_path.loc[i][2].split(', ')
-            stock_entrance_path[stock_path.loc[i][0], stock_path.loc[i][1]] = [int(x) for x in stock_entrance_path[stock_path.loc[i][0], stock_path.loc[i][1]]]
-        path_candidate = pd.read_csv("config/{}_all_path_candidate.csv".format(candidate_num))
+            stock_entrance_path[stock_path.loc[i][0], stock_path.loc[i][1]] = [int(x) for x in stock_entrance_path[
+                stock_path.loc[i][0], stock_path.loc[i][1]]]
+        path_candidate = pd.read_csv("config/task_{}/{}_all_path_candidate.csv".format(dataset_choose, candidate_num))
         path_candidate['Paths'] = path_candidate['Paths'].apply(literal_eval)
         path_candidate['Route time'] = path_candidate['Route time'].apply(literal_eval)
         path_candidate['Static congestion'] = path_candidate['Static congestion'].apply(literal_eval)
@@ -688,15 +689,14 @@ class Problem:
         task_not_perform = self.get_task_not_perform()
         # 获取任务列表
         task_f_end = {}
-        flow_task = [i for i in (task_not_perform + task_not_assigned) if i > 100]
-        stock_task = [i for i in (task_not_perform + task_not_assigned) if i <= 100]
+        flow_task = [i for i in (task_not_perform + task_not_assigned) if i > self.offline_task_num]
+        stock_task = [i for i in (task_not_perform + task_not_assigned) if i <= self.offline_task_num]
         flow_task = list(set(flow_task))
         stock_task = list(set(stock_task))
-        stock_task_i = {}
-        stock_task_i[1] = [i for i in stock_task if 1 <= i < 26]
-        stock_task_i[2] = [i for i in stock_task if 26 <= i < 51]
-        stock_task_i[3] = [i for i in stock_task if 51 <= i < 76]
-        stock_task_i[4] = [i for i in stock_task if 76 <= i < 101]
+        stock_task_i = {1: [i for i in stock_task if 1 <= i < 1 + self.offline_task_num/4],
+                        2: [i for i in stock_task if 1 + self.offline_task_num/4 <= i < 1 + self.offline_task_num/2],
+                        3: [i for i in stock_task if 1 + self.offline_task_num/2 <= i < 1 + 3 * self.offline_task_num/4],
+                        4: [i for i in stock_task if 1 + 3 * self.offline_task_num/4 <= i < 1 + self.offline_task_num]}
         for i in range(1, 5):
             stock_task_i[i].sort(reverse=True)
         flow_task.sort(reverse=False)
@@ -719,14 +719,10 @@ class Problem:
                 agv_task[i + 1] = 0
             else:
                 agv_task[i + 1] = 1
-                if 1 <= current_task[i] < 26:
-                    factual_s_task_num[1] += 1
-                elif 26 <= current_task[i] < 51:
-                    factual_s_task_num[2] += 1
-                elif 51 <= current_task[i] < 76:
-                    factual_s_task_num[3] += 1
-                elif 76 <= current_task[i] < 101:
-                    factual_s_task_num[4] += 1
+
+                if current_task[i] < self.offline_task_num + 1:
+                    factual_s_task_num[1 + int((current_task[i]-1) / int(self.offline_task_num/4))] += 1
+
         # 定义变量
         V_f = [1, 2, 3, 4]  # 流水线区域的叉车
         V_s = [5, 6, 7, 8]  # 中转库区域的叉车
@@ -762,7 +758,8 @@ class Problem:
         for i in range(1, 5):
             if len(task_s_i[i]) == 0:
                 for v in V_s:
-                    if (1 + 25 * (i - 1)) <= current_task[v - 1] < (1 + 25 * i) or current_task[v - 1] is None or current_task[v - 1] < 0:
+                    if (1 + int(self.offline_task_num/4) * (i - 1)) <= current_task[v - 1] < (1 + int(self.offline_task_num/4) * i) or \
+                            current_task[v - 1] is None or current_task[v - 1] < 0:
                         m.extend([v])
         m = list(set(m))
         for n in m:
@@ -776,7 +773,7 @@ class Problem:
         I_f_0 = task_f.copy()
         for v in V_f:
             I_f_0.extend([current_task[v - 1]])  # 流水线区域更新的任务（包含每个叉车正在执行的任务）
-        I_s_0 = task_s.copy()   # 中转库区域更新的任务（包含每个叉车正在执行的任务）
+        I_s_0 = task_s.copy()  # 中转库区域更新的任务（包含每个叉车正在执行的任务）
         for v in V_s:
             I_s_0.extend([current_task[v - 1]])  # 流水线区域更新的任务（包含每个叉车正在执行的任务）
         I_f_vir = task_f + _I_f  # 流水线区域更新的任务（包含每个叉车的最后一个虚拟任务）
@@ -818,7 +815,7 @@ class Problem:
             for i in (I_s + [-v] + current_not_virtual_task[v]):
                 for j in range(len(path_candidate)):
                     if path_candidate.loc[j][0] == self.Map[self.Task[i].start].entrance and path_candidate.loc[j][
-                            1] == self.Map[self.Task[i].end].entrance:
+                        1] == self.Map[self.Task[i].end].entrance:
                         x = Path()
                         x.start_node = path_candidate.loc[j][0]
                         x.end_node = path_candidate.loc[j][1]
@@ -916,12 +913,14 @@ class Problem:
                 area[r, v] = model.addVar(vtype=GRB.INTEGER, name=name7)
         # 添加目标函数约束
         model.addConstrs((sum(
-            xf[i, v, p] * pathf_i_v[i, v].path_time[p] * pathf_i_v[i, v].static_congestion[p] for i in (I_f + [-v] + current_not_virtual_task[v]) for
+            xf[i, v, p] * pathf_i_v[i, v].path_time[p] * pathf_i_v[i, v].static_congestion[p] for i in
+            (I_f + [-v] + current_not_virtual_task[v]) for
             p in P_f) + sum(
             yf[i, j, v, q] * qf_i_j_v[i, j, v].path_time[q] * qf_i_j_v[i, j, v].static_congestion[q] for i in
             (I_f + [current_task[v - 1]]) for j in (I_f + [-v]) for q in Q_f)) == T[v] for v in V_f)
         model.addConstrs((sum(
-            xs[i, v, p] * paths_i_v[i, v].path_time[p] * paths_i_v[i, v].static_congestion[p] for i in (I_s + [-v] + current_not_virtual_task[v]) for
+            xs[i, v, p] * paths_i_v[i, v].path_time[p] * paths_i_v[i, v].static_congestion[p] for i in
+            (I_s + [-v] + current_not_virtual_task[v]) for
             p in P_s) + sum(
             ys[i, j, v, q] * qs_i_j_v[i, j, v].path_time[q] * qs_i_j_v[i, j, v].static_congestion[q] for i in
             (I_s + [current_task[v - 1]]) for j in (I_s + [-v]) for q in Q_s)) == T[v] for v in V_s)
@@ -962,8 +961,10 @@ class Problem:
         model.addConstrs(sum(xs[-v, v, p] for p in P_s) == 1 for v in V_s)
 
         # constraint (11)
-        model.addConstrs(sum(xf[current_task[v - 1], v, p] for p in P_f) == 1 for v in V_f if len(current_not_virtual_task[v]) > 0)
-        model.addConstrs(sum(xs[current_task[v - 1], v, p] for p in P_s) == 1 for v in V_s if len(current_not_virtual_task[v]) > 0)
+        model.addConstrs(
+            sum(xf[current_task[v - 1], v, p] for p in P_f) == 1 for v in V_f if len(current_not_virtual_task[v]) > 0)
+        model.addConstrs(
+            sum(xs[current_task[v - 1], v, p] for p in P_s) == 1 for v in V_s if len(current_not_virtual_task[v]) > 0)
 
         # constraint (11)
         model.addConstrs(sum(yf[current_task[v - 1], j, v, q] for j in (I_f + [-v]) for q in Q_f) == 1 for v in V_f)

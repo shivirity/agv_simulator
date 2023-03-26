@@ -108,8 +108,10 @@ class Routeplanner_basic:
         4: 4
     }
 
-    def __init__(self, grids: dict):
+    def __init__(self, grids: dict, size: list):
         self.grids = grids
+        self.offline_task_num = size[0]
+        self.online_task_num = size[1]
 
     def get_route(self, start: int, end: int):
         return A_star(grids=self.grids, start_point=self.grids[start], end_point=self.grids[end]).process()
@@ -197,16 +199,16 @@ class Routeplanner_basic:
             assert isinstance(task_list, list)
 
         cur_task_list = [i[0] for i in agv_task_list if len(i) > 0]
-        offline_tasks = [i for i in task_to_plan if i < 101 if i not in cur_task_list]
-        online_tasks = list(sorted([i for i in task_to_plan if i > 100]))
+        offline_tasks = [i for i in task_to_plan if i < self.offline_task_num+1 if i not in cur_task_list]
+        online_tasks = list(sorted([i for i in task_to_plan if i > self.offline_task_num]))
         online_tasks = [i for i in online_tasks if i not in cur_task_list]
 
         # 离线任务和车对应的字典
         agv2offlinetask = {
-            5: [i for i in offline_tasks if 1 <= i < 26],
-            6: [i for i in offline_tasks if 26 <= i < 51],
-            7: [i for i in offline_tasks if 51 <= i < 76],
-            8: [i for i in offline_tasks if 76 <= i < 101],
+            5: [i for i in offline_tasks if 1 <= i < 1 + self.offline_task_num/4],
+            6: [i for i in offline_tasks if 1 + self.offline_task_num/4 <= i < 1 + self.offline_task_num/2],
+            7: [i for i in offline_tasks if 1 + self.offline_task_num/2 <= i < 1 + 3 * self.offline_task_num/4],
+            8: [i for i in offline_tasks if 1 + 3 * self.offline_task_num/4 <= i < 1 + self.offline_task_num],
         }
         # 任务列表字典，路线列表字典
         new_task_dict = {i: None for i in range(1, 9)}
