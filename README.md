@@ -54,10 +54,10 @@ side collision times = 0
 ```
 #### our method
 ```python
-operation time = 13224s
-task end time = [8518, 8794, 11704, 6490, 13224, 12934, 12586, 9292] in seconds
-agv wait time = [3298, 3792, 4686, 168, 5690, 5512, 5132, 1830] in seconds
-avg agv wait time = 3763 in seconds
+operation time = 13190s
+task end time = [8038, 8414, 9310, 7160, 13190, 12900, 13016, 9520] in seconds
+agv wait time = [1998, 2092, 1554, 364, 5610, 5502, 5558, 2088] in seconds
+avg agv wait time = 3095 in seconds
 deadlock times = 0
 loc collision times = 0
 side collision times = 7

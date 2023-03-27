@@ -27,7 +27,7 @@ sh.close()
 
 random.seed(42)
 
-dataset_choose = 200
+dataset_choose = 160
 
 def sp_uniform(t, size):
     """生成在线任务到达时间，从0开始"""
