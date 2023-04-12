@@ -33,9 +33,9 @@ sh.setFormatter(stream_fmt)
 logger.addHandler(sh)
 sh.close()
 
-log_print_freq = 1  # (set None to avoid printing log)
-planner_choose = 'baseline'  # 'new' or 'baseline'
-controller_choose = RouteController_basic
+log_print_freq = 3000  # (set None to avoid printing log)
+planner_choose = 'new'  # 'new' or 'baseline'
+controller_choose = RouteController
 
 # new route_scheduling parameters
 candidate_path_num = 5
@@ -110,11 +110,18 @@ if __name__ == '__main__':
             f'task end time = '
             f'{[(problem.AGV[i].end_state[0] if problem.AGV[i].end_state[0] > 0 else problem.time) for i in range(1, 9)]} in seconds')
         logger.info(
-            f'agv wait time = '
-            f'{[problem.AGV[i].waiting_time for i in range(1, 9)]} in seconds')
+            f'agv wait time(work) = '
+            f'{[problem.AGV[i].waiting_time_work for i in range(1, 9)]} in seconds')
+        logger.info(
+            f'agv wait time(park) = '
+            f'{[problem.AGV[i].waiting_time_park for i in range(1, 9)]} in seconds')
         logger.info(
             f'avg agv wait time = '
             f'{int(sum([problem.AGV[i].waiting_time for i in range(1, 9)])/8)} in seconds')
+        logger.info(
+            f'avg route_seq length = '
+            f'{sum([len(problem.Task[i].route_seq) for i in problem.Task.keys() if i > 0])/(len(problem.Task.keys())-8)}'
+        )
         logger.info(f'deadlock times = {problem.deadlock_times}')
         logger.info(f'loc collision times = {problem.loc_error_count}')
         logger.info(f'side collision times = {problem.side_error_count}')

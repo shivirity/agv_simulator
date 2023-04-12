@@ -69,8 +69,7 @@ class RouteController:
         self._init_shared_routes()
 
         # 随机因素
-        self.online_first_rate = 0
-        self.forward_access_prob = 0.05
+        self.online_first_rate = 0.5
 
     @staticmethod
     def _is_list_contained(lists, listl):

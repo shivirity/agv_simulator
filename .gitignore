@@ -135,3 +135,6 @@ solution/
 
 # IDEA file
 .idea
+
+# config file for experiment
+test_config.md

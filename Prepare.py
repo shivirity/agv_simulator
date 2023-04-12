@@ -27,7 +27,7 @@ sh.close()
 
 random.seed(42)
 
-dataset_choose = 160
+dataset_choose = 80
 
 def sp_uniform(t, size):
     """生成在线任务到达时间，从0开始"""
@@ -91,7 +91,12 @@ class AGV:
         self.task_status = None  # 'get', 'put', 'return', None
         self.is_load = 0  # 0表示车上空载，1表示车上有货
         self.end_state = (0, False)  # 车辆任务结束状态，第一项表示结束时间，第二项表示车辆是否已完成所有任务
-        self.waiting_time = 0  # 表示车辆因为控制策略而等待的时间
+        self.waiting_time_park = 0  # 表示车辆因为控制策略而等待的时间（在停靠点等待）
+        self.waiting_time_work = 0  # 表示车辆因为控制策略而等待的时间（行进过程中）
+
+    @property
+    def waiting_time(self):
+        return self.waiting_time_park + self.waiting_time_work
 
     def get_location(self):  # 考虑可以放在Problem类，依据AGV编号来获取实时位置
         return self.location
@@ -310,7 +315,13 @@ class Problem:
                 if self.AGV[i + 1].route:  # route为空则说明还没接到任务，控制器能判断出来
                     if self.AGV[i + 1].location != self.AGV[i + 1].park_loc:
                         self.AGV[i + 1].status = 'waiting'  # 该前进但需要等待
-                        self.AGV[i + 1].waiting_time += self.step
+                        self.AGV[i + 1].waiting_time_work += self.step
+                    else:
+                        if self.AGV[i + 1].end_state[1] is False:
+                            if not self.AGV[i + 1].tasklist:
+                                self.AGV[i + 1].waiting_time_park += self.step
+                            else:
+                                self.AGV[i + 1].waiting_time_work += self.step
                 self.moving_success[i] = False
             else:  # 该前进但因误差导致无法前进 or 本就无法前进
                 self.moving_success[i] = False
@@ -503,10 +514,10 @@ class Problem:
                 self.AGV[i].task_status = 'get'
                 self.AGV[i].task = None
             '''
-            '''
+
             if self.time == 2808 and i == 2:
                 continue
-            '''
+            
             self.AGV[i].tasklist = list(task_dict[i])
             if self.AGV[i].tasklist:  # 判断列表不为空
                 if self.AGV[i].task is None:  # 包括初始化  # 或self.AGV[i].task_status == None
