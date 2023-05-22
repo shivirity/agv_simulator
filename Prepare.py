@@ -94,6 +94,14 @@ class AGV:
         self.waiting_time_park = 0  # 表示车辆因为控制策略而等待的时间（在停靠点等待）
         self.waiting_time_work = 0  # 表示车辆因为控制策略而等待的时间（行进过程中）
 
+    def get_process(self, task_list: dict):
+        if self.task is None:
+            return 0
+        else:
+            task_end = task_list[self.task].end
+            end_idx = self.route[1:].index(task_end)
+            return round(((len(task_list[self.task].route_seq) - end_idx) / len(task_list[self.task].route_seq))*100)/100
+
     @property
     def waiting_time(self):
         return self.waiting_time_park + self.waiting_time_work

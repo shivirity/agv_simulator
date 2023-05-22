@@ -34,7 +34,7 @@ logger.addHandler(sh)
 sh.close()
 
 log_print_freq = 3000  # (set None to avoid printing log)
-planner_choose = 'new'  # 'new' or 'baseline'
+planner_choose = 'baseline'  # 'new' or 'baseline'
 controller_choose = RouteController
 
 # new route_scheduling parameters
@@ -44,6 +44,14 @@ max_agv_task_num = 2
 # size parameter
 size_dict = {i: [int(i/2), int(i/2)] for i in [80, 120, 160, 200]}
 size_dict[8080], size_dict[2333] = [0, 100], [100, 0]
+
+time_list = []
+collision_list = []
+deadlock_list = []
+wait_list = []
+loc_list = []
+task_list = []
+process_list = []
 
 if __name__ == '__main__':
 
@@ -101,6 +109,14 @@ if __name__ == '__main__':
         # logger.info(f'2: {problem.controller.shared_routes[2]}')
         if problem.time == 2810:
             logger.debug('')
+        # information collection
+        time_list.append(problem.time)
+        collision_list.append(problem.loc_error_count + problem.side_error_count)
+        deadlock_list.append(problem.deadlock_times)
+        wait_list.append([problem.AGV[i].waiting_time_work+problem.AGV[i].waiting_time_park for i in range(1, 9)])
+        loc_list.append([problem.AGV[i].location for i in range(1, 9)])
+        task_list.append([problem.AGV[i].task for i in range(1, 9)])
+        process_list.append([problem.AGV[i].get_process(problem.Task) for i in range(1, 9)])
 
     else:
         end = time.time()
@@ -125,3 +141,16 @@ if __name__ == '__main__':
         logger.info(f'deadlock times = {problem.deadlock_times}')
         logger.info(f'loc collision times = {problem.loc_error_count}')
         logger.info(f'side collision times = {problem.side_error_count}')
+
+        info_dict = {
+            'time': time_list,
+            'collision': collision_list,
+            'deadlock': deadlock_list,
+            'wait': wait_list,
+            'loc': loc_list,
+            'task': task_list,
+            'process': process_list
+        }
+        import pickle
+        with open("info.pkl", 'wb') as f:
+            pickle.dump(info_dict, f)
